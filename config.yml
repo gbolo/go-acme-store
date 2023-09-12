@@ -1,0 +1,18 @@
+log:
+  level: INFO
+
+server:
+  bind_address: 127.0.0.1
+  bind_port: 15872
+
+acme:
+  # ACME directory server to use
+  directory: "https://acme-staging-v02.api.letsencrypt.org/directory"
+  # ACME account to use (private key will get created if it does not exist)
+  account_email: gbolo@linuxctl.com
+  # DNS server to use for validating dns challenge
+  dns_server: 8.8.8.8:53
+  # currently ONLY digitalocean is supported...
+  dns_provider: digitalocean
+  ## you should set this via env var instead
+  #digitalocean_token: dop_xxx

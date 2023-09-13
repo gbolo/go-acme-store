@@ -16,3 +16,12 @@ acme:
   dns_provider: digitalocean
   ## you should set this via env var instead
   #digitalocean_token: dop_xxx
+
+vault:
+  address: "http://127.0.0.1:8200"
+  # path where a KV (v2) secrets engine kv (v2) is mounted on
+  kv2_mount: kv
+  # path (relative to mount) where we want to store our secrets
+  kv2_secret_path: platform/acme
+  ## you should set this via env var instead
+  #token: xxx

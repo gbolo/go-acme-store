@@ -14,20 +14,20 @@ type Keystore interface {
 }
 
 type AcmeAccount struct {
-	Email string
-	Key   string
+	Email string `json:"email" mapstructure:"email"`
+	Key   string `json:"key" mapstructure:"key"`
 }
 
 type CertAndKey struct {
-	CertChainPEM  string
-	LeafCertPEM   string
-	CertChainURL  string
-	PrivateKeyPEM string
-	Issuers       []string
-	IssuedOn      string
-	Expiration    string
-	CommonName    string
-	SANs          []string
+	CertChainPEM  string   `json:"cert_chain_pem" mapstructure:"cert_chain_pem"`
+	LeafCertPEM   string   `json:"leaf_cert_pem" mapstructure:"leaf_cert_pem"`
+	CertChainURL  string   `json:"cert_chain_url" mapstructure:"cert_chain_url"`
+	PrivateKeyPEM string   `json:"private_key_pem" mapstructure:"private_key_pem"`
+	Issuers       []string `json:"issuers" mapstructure:"issuers"`
+	IssuedOn      string   `json:"issued_on" mapstructure:"issued_on"`
+	Expiration    string   `json:"expires_on" mapstructure:"expires_on"`
+	CommonName    string   `json:"common_name" mapstructure:"common_name"`
+	SANs          []string `json:"sans" mapstructure:"sans"`
 }
 
 func (c *CertAndKey) populateMissingFields() (err error) {

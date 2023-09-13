@@ -2,6 +2,8 @@ package crypto
 
 import (
 	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
@@ -49,4 +51,13 @@ func DecodePrivateKey(ecKeyPEM string) (*ecdsa.PrivateKey, error) {
 	}
 
 	return privKey, nil
+}
+
+func GenerateECKey() (*ecdsa.PrivateKey, error) {
+	return ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+}
+
+func GenerateECKeyPEM() (string, error) {
+	key, _ := GenerateECKey()
+	return EncodePrivateKey(key)
 }

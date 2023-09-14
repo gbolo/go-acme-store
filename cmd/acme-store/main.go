@@ -1,0 +1,37 @@
+package main
+
+import (
+	"go-acme-store/pkg/config"
+	"go-acme-store/pkg/log"
+	"os"
+
+	"github.com/fsnotify/fsnotify"
+	"github.com/spf13/viper"
+)
+
+func main() {
+	appName := "acme-store"
+	cfg := os.Getenv("CONFIG_FILE")
+	if cfg == "" {
+		cfg = "./config.yml"
+	}
+	config.MustInitViperAndLogger(appName, cfg)
+
+	// initialize shared resources
+	initKeystore()
+	loadDomainsFromConfig()
+
+	// watch for config changes to re-initialize
+	viper.WatchConfig()
+	viper.OnConfigChange(func(e fsnotify.Event) {
+		log.Warnf("config change detected")
+		initKeystore()
+		loadDomainsFromConfig()
+	})
+
+	// kick off the daemon on its own go routine
+	go acmeDaemon()
+
+	// configure and start http server
+	httpServerDaemon(appName)
+}

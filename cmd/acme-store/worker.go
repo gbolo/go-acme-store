@@ -83,9 +83,21 @@ func doAcmeOrders() {
 			}
 		}
 		
-		err = acme.RenewCertIfNeeded(ks, domain, sans)
-		if err != nil {
-			log.Errorf("failed to obtain certificate for domain %s: %v", domain, err)
+		acmeErr := acme.RenewCertIfNeeded(ks, domain, sans)
+		if acmeErr != nil {
+			log.Errorf("failed to obtain certificate for domain %s: %v", domain, acmeErr)
+			
+			// Update certificate status to failed with error message
+			existingCert, getErr := ks.GetCertAndKey(domain)
+			if getErr == nil && existingCert.CommonName != "" {
+				existingCert.Status = "failed"
+				existingCert.Error = acmeErr.Error()
+				if updateErr := ks.StoreCertAndKey(domain, existingCert); updateErr != nil {
+					log.Errorf("failed to update error status for %s: %v", domain, updateErr)
+				} else {
+					log.Infof("marked certificate for %s as failed", domain)
+				}
+			}
 		}
 	}
 }

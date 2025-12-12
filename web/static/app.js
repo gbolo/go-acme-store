@@ -1,9 +1,114 @@
 // Global state
 let certificates = [];
+let autoRefreshInterval = null;
 
 // Load certificates on page load
 document.addEventListener('DOMContentLoaded', function() {
     loadCertificates();
+});
+
+// Configuration modal functions
+async function showConfig() {
+    const modal = document.getElementById('configModal');
+    const loadingEl = document.getElementById('configLoading');
+    const contentEl = document.getElementById('configContent');
+    
+    modal.style.display = 'block';
+    loadingEl.style.display = 'flex';
+    contentEl.style.display = 'none';
+    
+    try {
+        const response = await fetch('/api/config');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const config = await response.json();
+        
+        // Helper function to set config value with copy button
+        function setConfigValue(elementId, value, colorStyle) {
+            const valueEl = document.getElementById(elementId);
+            const displayValue = value || 'N/A';
+            const containerEl = valueEl.closest('.config-value-container');
+            
+            // Update the value text
+            valueEl.textContent = displayValue;
+            valueEl.title = displayValue;
+            
+            if (colorStyle) {
+                valueEl.style.color = colorStyle;
+            }
+            
+            // Add copy button if not already present
+            if (!containerEl.querySelector('.config-copy-btn')) {
+                const copyBtn = document.createElement('button');
+                copyBtn.className = 'config-copy-btn';
+                copyBtn.innerHTML = '<i class="fi fi-rr-copy-alt"></i>';
+                copyBtn.onclick = function() { copyConfigValue(displayValue, this); };
+                containerEl.appendChild(copyBtn);
+            } else {
+                // Update existing button's onclick
+                const copyBtn = containerEl.querySelector('.config-copy-btn');
+                copyBtn.onclick = function() { copyConfigValue(displayValue, this); };
+            }
+        }
+        
+        // Populate config values
+        setConfigValue('config-log-level', config.log.level);
+        setConfigValue('config-server-bind-address', config.server.bind_address);
+        setConfigValue('config-server-bind-port', config.server.bind_port);
+        setConfigValue('config-acme-directory', config.acme.directory);
+        setConfigValue('config-acme-email', config.acme.account_email);
+        setConfigValue('config-acme-dns-server', config.acme.dns_server);
+        setConfigValue('config-acme-dns-provider', config.acme.dns_provider);
+        setConfigValue('config-vault-address', config.vault.address);
+        setConfigValue('config-vault-mount', config.vault.kv2_mount);
+        setConfigValue('config-vault-path', config.vault.kv2_secret_path);
+        
+        // Special handling for TLS skip verify (with color coding)
+        const tlsSkip = config.vault.tls_skip_verify;
+        const tlsSkipValue = tlsSkip ? 'Yes' : 'No';
+        const tlsColor = tlsSkip ? 'var(--warning-color)' : 'var(--success-color)';
+        setConfigValue('config-vault-tls-skip', tlsSkipValue, tlsColor);
+        
+        loadingEl.style.display = 'none';
+        contentEl.style.display = 'block';
+        
+    } catch (error) {
+        console.error('Error loading config:', error);
+        loadingEl.innerHTML = `<div class="error-text">Failed to load configuration: ${error.message}</div>`;
+    }
+}
+
+function closeConfigModal() {
+    const modal = document.getElementById('configModal');
+    modal.style.display = 'none';
+}
+
+// Copy config value to clipboard
+function copyConfigValue(value, button) {
+    navigator.clipboard.writeText(value).then(() => {
+        const originalHTML = button.innerHTML;
+        button.innerHTML = '<i class="fi fi-rr-check"></i>';
+        button.classList.add('copied');
+        
+        setTimeout(() => {
+            button.innerHTML = originalHTML;
+            button.classList.remove('copied');
+        }, 2000);
+    }).catch(err => {
+        console.error('Failed to copy:', err);
+        alert('Failed to copy to clipboard');
+    });
+}
+
+// Close config modal when clicking outside
+window.addEventListener('click', function(event) {
+    const modal = document.getElementById('configModal');
+    if (event.target === modal) {
+        closeConfigModal();
+    }
 });
 
 // Load certificates from API
@@ -40,6 +145,9 @@ async function loadCertificates() {
 
         // Update last updated time
         updateLastUpdatedTime();
+        
+        // Setup auto-refresh if there are pending certificates
+        setupAutoRefresh();
 
     } catch (error) {
         console.error('Error loading certificates:', error);
@@ -97,10 +205,64 @@ function createCertificateCard(cert, index) {
     const card = document.createElement('div');
     card.className = 'cert-card';
 
-    const status = getCertificateStatus(cert.expires_on);
-    const expiryDate = new Date(cert.expires_on);
-    const issuedDate = new Date(cert.issued_on);
-    const daysUntilExpiry = Math.floor((expiryDate - new Date()) / (1000 * 60 * 60 * 24));
+    // Check certificate status
+    const certStatus = cert.status || 'issued';
+    let statusBadge = '';
+    let detailsSection = '';
+    
+    if (certStatus === 'pending') {
+        statusBadge = '<div class="cert-status status-pending">Pending</div>';
+        detailsSection = `
+            <div class="cert-details">
+                <div class="cert-detail pending-notice">
+                    <i class="fi fi-rr-hourglass"></i>
+                    <span>Certificate issuance in progress... This may take a few minutes.</span>
+                </div>
+            </div>
+        `;
+    } else if (certStatus === 'failed') {
+        statusBadge = '<div class="cert-status status-failed">Failed</div>';
+        detailsSection = `
+            <div class="cert-details">
+                <div class="cert-detail error-notice">
+                    <i class="fi fi-rr-cross-circle"></i>
+                    <div>
+                        <strong>Error:</strong>
+                        <p>${escapeHtml(cert.error || 'Unknown error')}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    } else {
+        const status = getCertificateStatus(cert.expires_on);
+        const expiryDate = new Date(cert.expires_on);
+        const issuedDate = new Date(cert.issued_on);
+        const daysUntilExpiry = Math.floor((expiryDate - new Date()) / (1000 * 60 * 60 * 24));
+        
+        statusBadge = `<div class="cert-status status-${status.class}">${status.text}</div>`;
+        detailsSection = `
+            <div class="cert-details">
+                <div class="cert-detail">
+                    <div class="detail-label">Issued On</div>
+                    <div class="detail-value">${formatDate(issuedDate)}</div>
+                </div>
+                <div class="cert-detail">
+                    <div class="detail-label">Expires On</div>
+                    <div class="detail-value">${formatDate(expiryDate)}</div>
+                </div>
+                <div class="cert-detail">
+                    <div class="detail-label">Days Until Expiry</div>
+                    <div class="detail-value" style="color: ${daysUntilExpiry < 0 ? 'var(--danger-color)' : daysUntilExpiry <= 30 ? 'var(--warning-color)' : 'var(--success-color)'}">
+                        ${daysUntilExpiry} days
+                    </div>
+                </div>
+                <div class="cert-detail">
+                    <div class="detail-label">Certificate Chain</div>
+                    <div class="detail-value">${cert.issuers ? cert.issuers.length : 0} issuer(s)</div>
+                </div>
+            </div>
+        `;
+    }
 
     card.innerHTML = `
         <div class="cert-header">
@@ -109,31 +271,12 @@ function createCertificateCard(cert, index) {
                     <div class="cert-name">${escapeHtml(cert.common_name)}</div>
                     ${cert.managed ? '<span class="managed-badge">Managed</span>' : '<span class="unmanaged-badge">Unmanaged</span>'}
                 </div>
-                <div class="cert-issuer">Issuer: ${cert.issuers && cert.issuers.length > 0 ? escapeHtml(cert.issuers[0]) : 'Unknown'}</div>
+                <div class="cert-issuer">Issuer: ${cert.issuers && cert.issuers.length > 0 ? escapeHtml(cert.issuers[0]) : (certStatus === 'issued' ? 'Unknown' : 'Pending issuance')}</div>
             </div>
-            <div class="cert-status status-${status.class}">${status.text}</div>
+            ${statusBadge}
         </div>
 
-        <div class="cert-details">
-            <div class="cert-detail">
-                <div class="detail-label">Issued On</div>
-                <div class="detail-value">${formatDate(issuedDate)}</div>
-            </div>
-            <div class="cert-detail">
-                <div class="detail-label">Expires On</div>
-                <div class="detail-value">${formatDate(expiryDate)}</div>
-            </div>
-            <div class="cert-detail">
-                <div class="detail-label">Days Until Expiry</div>
-                <div class="detail-value" style="color: ${daysUntilExpiry < 0 ? 'var(--danger-color)' : daysUntilExpiry <= 30 ? 'var(--warning-color)' : 'var(--success-color)'}">
-                    ${daysUntilExpiry} days
-                </div>
-            </div>
-            <div class="cert-detail">
-                <div class="detail-label">Certificate Chain</div>
-                <div class="detail-value">${cert.issuers ? cert.issuers.length : 0} issuer(s)</div>
-            </div>
-        </div>
+        ${detailsSection}
 
         ${cert.sans && cert.sans.length > 0 ? `
             <div class="cert-detail">
@@ -144,16 +287,18 @@ function createCertificateCard(cert, index) {
             </div>
         ` : ''}
 
-                <div class="cert-actions">
-                    <button class="btn btn-primary" onclick="viewCertificate(${index})">
-                        <i class="fi fi-rr-diploma"></i>
-                        <span>View Certificate</span>
-                    </button>
-                    <button class="btn btn-secondary" onclick="viewCertificateChain(${index})">
-                        <i class="fi fi-rr-link-alt"></i>
-                        <span>View Full Chain</span>
-                    </button>
-                </div>
+        ${certStatus === 'issued' ? `
+            <div class="cert-actions">
+                <button class="btn btn-primary" onclick="viewCertificate(${index})">
+                    <i class="fi fi-rr-diploma"></i>
+                    <span>View Certificate</span>
+                </button>
+                <button class="btn btn-secondary" onclick="viewCertificateChain(${index})">
+                    <i class="fi fi-rr-link-alt"></i>
+                    <span>View Full Chain</span>
+                </button>
+            </div>
+        ` : ''}
     `;
 
     return card;
@@ -293,7 +438,9 @@ async function showDomainManager() {
     document.getElementById('domainAddMessage').style.display = 'none';
     document.getElementById('newDomainInput').value = '';
     
-    // Load domains
+    // Ensure we have latest certificate data before loading domains
+    await loadCertificates();
+    // Load domains with status pills
     await loadDomains();
 }
 
@@ -329,17 +476,43 @@ async function loadDomains() {
         }
         
         domains.forEach(domain => {
+            // Find certificate status for this domain
+            const cert = certificates.find(c => c.common_name === domain);
+            let statusPill = '';
+            
+            if (cert) {
+                if (cert.status === 'failed') {
+                    statusPill = '<span class="domain-status-pill status-failed-pill">Failed</span>';
+                } else if (cert.status === 'issued') {
+                    // Check if expired or expiring
+                    const expiryDate = new Date(cert.expires_on);
+                    const daysUntilExpiry = Math.floor((expiryDate - new Date()) / (1000 * 60 * 60 * 24));
+                    if (daysUntilExpiry < 0) {
+                        statusPill = '<span class="domain-status-pill status-expired-pill">Expired</span>';
+                    } else if (daysUntilExpiry <= 30) {
+                        statusPill = '<span class="domain-status-pill status-expiring-pill">Expiring Soon</span>';
+                    }
+                }
+            }
+            
             const domainItem = document.createElement('div');
             domainItem.className = 'domain-item';
             domainItem.innerHTML = `
                 <div class="domain-name">
                     <i class="fi fi-rr-globe"></i>
                     <span>${escapeHtml(domain)}</span>
+                    ${statusPill}
                 </div>
-                <button class="btn btn-danger btn-small" onclick="removeDomain('${escapeForJs(domain)}')">
-                    <i class="fi fi-rr-trash"></i>
-                    <span>Remove</span>
-                </button>
+                <div class="domain-actions">
+                    <button class="btn btn-warning btn-small" onclick="removeDomain('${escapeForJs(domain)}', false)">
+                        <i class="fi fi-rr-minus-circle"></i>
+                        <span>Unmanage</span>
+                    </button>
+                    <button class="btn btn-danger btn-small" onclick="removeDomain('${escapeForJs(domain)}', true)">
+                        <i class="fi fi-rr-trash"></i>
+                        <span>Delete</span>
+                    </button>
+                </div>
             `;
             listEl.appendChild(domainItem);
         });
@@ -432,13 +605,37 @@ async function addDomain() {
     }
 }
 
-async function removeDomain(domain) {
-    if (!confirm(`Are you sure you want to remove ${domain}?\n\nNote: The certificate will remain in Vault but won't be renewed.`)) {
+async function removeDomain(domain, deleteCert) {
+    let confirmMessage;
+    
+    if (deleteCert) {
+        confirmMessage = `⚠️ PERMANENT DELETION ⚠️\n\nAre you sure you want to COMPLETELY DELETE ${domain}?\n\n` +
+                        `This will:\n` +
+                        `• Remove domain from managed list\n` +
+                        `• DELETE the certificate from Vault permanently\n` +
+                        `• Remove all certificate data (cannot be recovered)\n\n` +
+                        `This action CANNOT be undone!`;
+    } else {
+        confirmMessage = `Unmanage ${domain}?\n\n` +
+                        `This will:\n` +
+                        `• Remove domain from managed list\n` +
+                        `• Mark certificate as "unmanaged"\n` +
+                        `• Certificate will NOT be renewed\n` +
+                        `• Certificate data remains in Vault for reference\n\n` +
+                        `You can re-add this domain later.`;
+    }
+    
+    if (!confirm(confirmMessage)) {
         return;
     }
     
     try {
-        const response = await fetch(`/api/domains/${encodeURIComponent(domain)}`, {
+        let url = `/api/domains/${encodeURIComponent(domain)}`;
+        if (deleteCert) {
+            url += '?delete_cert=true';
+        }
+        
+        const response = await fetch(url, {
             method: 'DELETE'
         });
         
@@ -451,7 +648,7 @@ async function removeDomain(domain) {
         // Reload domain list
         await loadDomains();
         
-        // Optionally reload certificates
+        // Reload certificates
         loadCertificates();
         
     } catch (error) {
@@ -484,6 +681,34 @@ async function triggerRenewal() {
         }
     } catch (error) {
         console.error('Error triggering renewal:', error);
+    }
+}
+
+function setupAutoRefresh() {
+    const indicator = document.getElementById('autoRefreshIndicator');
+    
+    // Clear existing interval
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+    }
+    
+    // Check if there are any pending certificates
+    const hasPending = certificates.some(cert => cert.status === 'pending');
+    
+    if (hasPending) {
+        console.log('Pending certificates detected, enabling auto-refresh every 10 seconds');
+        if (indicator) {
+            indicator.style.display = 'flex';
+        }
+        autoRefreshInterval = setInterval(() => {
+            console.log('Auto-refreshing due to pending certificates...');
+            loadCertificates();
+        }, 10000); // Refresh every 10 seconds
+    } else {
+        if (indicator) {
+            indicator.style.display = 'none';
+        }
     }
 }
 

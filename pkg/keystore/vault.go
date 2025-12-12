@@ -298,6 +298,20 @@ func (v *VaultKeystore) AddManagedDomainWithSANs(domain string, sans []string) e
 		} else {
 			log.Infof("certificate for %s is now managed and will be renewed", domain)
 		}
+	} else if err != nil || certAndKey.CommonName == "" {
+		// No existing certificate, create a placeholder with pending status
+		placeholder := CertAndKey{
+			CommonName: domain,
+			SANs:       sans,
+			Managed:    true,
+			Status:     "pending",
+		}
+		err = v.StoreCertAndKey(domain, placeholder)
+		if err != nil {
+			log.Warnf("failed to create placeholder cert for %s: %v", domain, err)
+		} else {
+			log.Infof("created pending placeholder for %s", domain)
+		}
 	}
 
 	return nil

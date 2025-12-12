@@ -20,6 +20,7 @@ func httpServerDaemon(appName string) {
 	api := fiberApp.Group("/api")
 	api.Get("/version", handlerVersion)
 	api.Get("/healthz", handlerHealthCheck)
+	api.Get("/config", handlerConfig)
 	api.Get("/certs", handlerCerts)
 	
 	// Domain management API
@@ -57,6 +58,35 @@ func handlerHealthCheck(c *fiber.Ctx) (err error) {
 	return c.Status(200).JSON(&fiber.Map{"status": "success"})
 }
 
+func handlerConfig(c *fiber.Ctx) (err error) {
+	// Return non-sensitive configuration
+	config := &fiber.Map{
+		"log": &fiber.Map{
+			"level": viper.GetString("log.level"),
+		},
+		"server": &fiber.Map{
+			"bind_address": viper.GetString("server.bind_address"),
+			"bind_port":    viper.GetString("server.bind_port"),
+		},
+		"acme": &fiber.Map{
+			"directory":     viper.GetString("acme.directory"),
+			"account_email": viper.GetString("acme.account_email"),
+			"dns_server":    viper.GetString("acme.dns_server"),
+			"dns_provider":  viper.GetString("acme.dns_provider"),
+			// NOTE: digitalocean_token is intentionally excluded (sensitive)
+		},
+		"vault": &fiber.Map{
+			"address":         viper.GetString("vault.address"),
+			"kv2_mount":       viper.GetString("vault.kv2_mount"),
+			"kv2_secret_path": viper.GetString("vault.kv2_secret_path"),
+			"tls_skip_verify": viper.GetBool("vault.tls_skip_verify"),
+			// NOTE: token is intentionally excluded (sensitive)
+		},
+	}
+	
+	return c.Status(200).JSON(config)
+}
+
 func handlerWebUI(c *fiber.Ctx) (err error) {
 	return c.SendFile("./web/static/index.html")
 }
@@ -84,6 +114,14 @@ func handlerCerts(c *fiber.Ctx) (err error) {
 			continue
 		}
 		
+		// Default status to "issued" if not set (for backward compatibility)
+		status := certAndKey.Status
+		if status == "" && certAndKey.LeafCertPEM != "" {
+			status = "issued"
+		} else if status == "" {
+			status = "pending"
+		}
+		
 		response = append(response, certInfo{
 			CommonName:   certAndKey.CommonName,
 			SANs:         certAndKey.SANs,
@@ -94,6 +132,8 @@ func handlerCerts(c *fiber.Ctx) (err error) {
 			IssuedOn:     certAndKey.IssuedOn,
 			ExpiresOn:    certAndKey.Expiration,
 			Managed:      certAndKey.Managed,
+			Status:       status,
+			Error:        certAndKey.Error,
 		})
 	}
 	
@@ -115,6 +155,8 @@ type certInfo struct {
 	IssuedOn     string   `json:"issued_on"`
 	ExpiresOn    string   `json:"expires_on"`
 	Managed      bool     `json:"managed"`
+	Status       string   `json:"status"`
+	Error        string   `json:"error,omitempty"`
 }
 
 // Domain management handlers

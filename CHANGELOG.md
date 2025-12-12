@@ -27,12 +27,42 @@
   - Web UI includes "Manage Domains" modal for easy domain management
   - Real-time domain list updates in UI
   - Automatic certificate issuance when adding domains via Web UI
+  - **UI now supports both soft and hard delete**:
+    - "Unmanage" button (orange) for soft delete
+    - "Delete" button (red) for hard delete with warning
+    - Different confirmation dialogs explaining each action
+  - **Visual improvements**:
+    - "Manage Domains" button now green for better visibility
+    - Domain list shows status pills (Failed, Expired, Expiring Soon)
+    - Orange pills for failed or problematic domains
+    - Real-time status updates when opening domain manager
   - **Subject Alternative Names (SANs) Support**: 
     - UI allows entering multiple SANs when adding domains
     - SANs can be entered one per line or comma-separated
     - API accepts `sans` array in domain add request
     - ACME now requests certificates for all domains (CN + SANs)
     - SANs stored in Vault with domain configuration
+
+- **Certificate Status Tracking**:
+    - Added `status` field to certificates: "pending", "issued", "failed"
+    - Added `error` field to capture issuance errors
+    - Domains appear immediately in UI with "Pending" status
+    - Status updates automatically when certificate is issued
+    - Failed certificates show error messages in UI
+    - Pending certificates show animated loading indicator
+    - Placeholder certificate created when domain added
+
+- **Configuration Endpoint**:
+    - New `GET /api/config` endpoint to view active configuration
+    - Returns all non-sensitive configuration values
+    - Excludes secrets (vault token, API tokens)
+    - Useful for debugging and monitoring
+    - **UI integration**: "View Config" button in action bar
+    - Modal displays configuration in organized sections
+    - Color-coded TLS skip verify warning
+    - **Copy buttons**: Each config value has a copy button
+    - **Hover to expand**: Long values expand on hover to show full text
+    - **Better spacing**: Improved title spacing and layout
   
 - **Certificate Management States**:
   - Added `managed` boolean field to certificates
@@ -106,6 +136,8 @@
 - Fixed `readDataIntoInterface()` to return nil error (not undefined) when no data exists
 - Fixed re-adding previously removed domains - now automatically marks certificate as managed
 - Fixed ACME function not using SANs parameter - now properly requests multi-domain certificates
+- **Fixed critical crash** when ACME issuance fails (variable shadowing bug in error handler)
+- Fixed nil pointer dereference by properly checking certificate exists before updating status
 
 ### Technical Details
 - **Frontend Stack**: Vanilla JavaScript, CSS3, HTML5 (no frameworks required)

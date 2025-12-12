@@ -10,6 +10,7 @@ A Go application that automates ACME certificate management and stores certifica
 - ⚙️ **Domain Management**: Add/remove domains via Web UI or REST API without restarting
 - 🔄 **Automatic Renewal**: Monitors certificate expiration and automatically renews certificates
 - 📊 **Real-time Statistics**: Dashboard showing certificate status, expiration dates, and health metrics
+- 🔄 **Status Tracking**: Real-time status updates (Pending → Issued/Failed) with error reporting
 - 🔍 **DNS Challenge Support**: Currently supports DigitalOcean DNS provider for DNS-01 challenges
 - 📱 **Responsive Design**: Works seamlessly on desktop and mobile devices
 
@@ -95,6 +96,7 @@ Set these environment variables for sensitive data:
 ### API - System
 - `GET /api/healthz` - Health check endpoint
 - `GET /api/version` - Application version information
+- `GET /api/config` - View non-sensitive configuration
 
 ### Monitoring
 - `GET /metrics` - Server metrics and monitoring

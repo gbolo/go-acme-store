@@ -48,12 +48,22 @@
                     </svg>
                     <span>Refresh</span>
                 </button>
-                <button class="action-btn btn-secondary" onclick="showDomainManager()">
+                <button class="action-btn btn-success" onclick="showDomainManager()">
                     <i class="fi fi-rr-settings"></i>
                     <span>Manage Domains</span>
                 </button>
+                <button class="action-btn btn-secondary" onclick="showConfig()">
+                    <i class="fi fi-rr-settings-sliders"></i>
+                    <span>View Config</span>
+                </button>
             </div>
-            <span id="lastUpdated" class="last-updated"></span>
+            <div class="status-info">
+                <div id="autoRefreshIndicator" class="auto-refresh-indicator" style="display: none;">
+                    <i class="fi fi-rr-refresh"></i>
+                    <span>Auto-refreshing (pending certificates)...</span>
+                </div>
+                <span id="lastUpdated" class="last-updated"></span>
+            </div>
         </div>
 
         <div id="loading" class="loading">
@@ -71,6 +81,108 @@
                 <span class="close" onclick="closeModal()">&times;</span>
                 <h2 id="modalTitle"></h2>
                 <div id="modalBody"></div>
+            </div>
+        </div>
+
+        <!-- Configuration Modal -->
+        <div id="configModal" class="modal">
+            <div class="modal-content config-modal">
+                <span class="close" onclick="closeConfigModal()">&times;</span>
+                <h2><i class="fi fi-rr-settings-sliders"></i> Application Configuration</h2>
+                
+                <div id="configLoading" class="loading">
+                    <i class="fi fi-rr-spinner"></i>
+                    <span>Loading configuration...</span>
+                </div>
+                
+                <div id="configContent" style="display: none;">
+                    <div class="config-section">
+                        <h3><i class="fi fi-rr-document"></i> Logging</h3>
+                        <div class="config-item" id="config-log-level-item">
+                            <span class="config-key">Log Level:</span>
+                            <div class="config-value-container">
+                                <span class="config-value" id="config-log-level"></span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="config-section">
+                        <h3><i class="fi fi-rr-network"></i> Server</h3>
+                        <div class="config-item" id="config-server-bind-address-item">
+                            <span class="config-key">Bind Address:</span>
+                            <div class="config-value-container">
+                                <span class="config-value" id="config-server-bind-address"></span>
+                            </div>
+                        </div>
+                        <div class="config-item" id="config-server-bind-port-item">
+                            <span class="config-key">Bind Port:</span>
+                            <div class="config-value-container">
+                                <span class="config-value" id="config-server-bind-port"></span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="config-section">
+                        <h3><i class="fi fi-rr-diploma"></i> ACME</h3>
+                        <div class="config-item" id="config-acme-directory-item">
+                            <span class="config-key">Directory:</span>
+                            <div class="config-value-container">
+                                <span class="config-value" id="config-acme-directory"></span>
+                            </div>
+                        </div>
+                        <div class="config-item" id="config-acme-email-item">
+                            <span class="config-key">Account Email:</span>
+                            <div class="config-value-container">
+                                <span class="config-value" id="config-acme-email"></span>
+                            </div>
+                        </div>
+                        <div class="config-item" id="config-acme-dns-server-item">
+                            <span class="config-key">DNS Server:</span>
+                            <div class="config-value-container">
+                                <span class="config-value" id="config-acme-dns-server"></span>
+                            </div>
+                        </div>
+                        <div class="config-item" id="config-acme-dns-provider-item">
+                            <span class="config-key">DNS Provider:</span>
+                            <div class="config-value-container">
+                                <span class="config-value" id="config-acme-dns-provider"></span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="config-section">
+                        <h3><i class="fi fi-rr-lock"></i> Vault</h3>
+                        <div class="config-item" id="config-vault-address-item">
+                            <span class="config-key">Address:</span>
+                            <div class="config-value-container">
+                                <span class="config-value" id="config-vault-address"></span>
+                            </div>
+                        </div>
+                        <div class="config-item" id="config-vault-mount-item">
+                            <span class="config-key">KV2 Mount:</span>
+                            <div class="config-value-container">
+                                <span class="config-value" id="config-vault-mount"></span>
+                            </div>
+                        </div>
+                        <div class="config-item" id="config-vault-path-item">
+                            <span class="config-key">KV2 Secret Path:</span>
+                            <div class="config-value-container">
+                                <span class="config-value" id="config-vault-path"></span>
+                            </div>
+                        </div>
+                        <div class="config-item" id="config-vault-tls-skip-item">
+                            <span class="config-key">TLS Skip Verify:</span>
+                            <div class="config-value-container">
+                                <span class="config-value" id="config-vault-tls-skip"></span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="config-note">
+                        <i class="fi fi-rr-info"></i>
+                        <span>Sensitive values (tokens, passwords) are not displayed for security reasons.</span>
+                    </div>
+                </div>
             </div>
         </div>
 

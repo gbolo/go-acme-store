@@ -133,6 +133,16 @@ header h1 {
     background: var(--border-color);
 }
 
+.action-btn.btn-success {
+    background: var(--success-color);
+    color: white;
+}
+
+.action-btn.btn-success:hover {
+    background: #059669;
+    transform: scale(1.05);
+}
+
 .action-btn svg {
     width: 18px;
     height: 18px;
@@ -162,6 +172,30 @@ header h1 {
 @keyframes spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
+}
+
+.status-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 5px;
+}
+
+.auto-refresh-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--warning-color);
+    font-size: 0.85em;
+    padding: 6px 12px;
+    background: rgba(245, 158, 11, 0.1);
+    border-radius: 6px;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.auto-refresh-indicator i {
+    font-size: 14px;
+    animation: spin 2s linear infinite;
 }
 
 .last-updated {
@@ -292,6 +326,24 @@ header h1 {
     border: 1px solid var(--danger-color);
 }
 
+.status-pending {
+    background: rgba(245, 158, 11, 0.2);
+    color: var(--warning-color);
+    border: 1px solid var(--warning-color);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.status-failed {
+    background: rgba(239, 68, 68, 0.2);
+    color: var(--danger-color);
+    border: 1px solid var(--danger-color);
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
 .cert-details {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -412,6 +464,10 @@ header h1 {
     max-height: 80vh;
     overflow-y: auto;
     animation: slideIn 0.3s;
+}
+
+.modal-content.config-modal {
+    max-width: 700px;
 }
 
 @keyframes slideIn {
@@ -552,6 +608,8 @@ header h1 {
     border: 1px solid var(--border-color);
     border-radius: 8px;
     transition: background 0.2s;
+    flex-wrap: wrap;
+    gap: 10px;
 }
 
 .domain-item:hover {
@@ -564,11 +622,56 @@ header h1 {
     gap: 10px;
     font-size: 1.1em;
     color: var(--text-color);
+    flex: 1;
+    min-width: 200px;
+    flex-wrap: wrap;
 }
 
 .domain-name i {
     font-size: 20px;
     color: var(--primary-color);
+}
+
+.domain-status-pill {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.7em;
+    font-weight: 600;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.status-failed-pill {
+    background: rgba(239, 68, 68, 0.2);
+    color: var(--danger-color);
+    border: 1px solid var(--danger-color);
+}
+
+.status-expired-pill {
+    background: rgba(245, 158, 11, 0.2);
+    color: var(--warning-color);
+    border: 1px solid var(--warning-color);
+}
+
+.status-expiring-pill {
+    background: rgba(245, 158, 11, 0.2);
+    color: var(--warning-color);
+    border: 1px solid var(--warning-color);
+}
+
+.domain-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.btn-warning {
+    background: var(--warning-color);
+    color: white;
+}
+
+.btn-warning:hover {
+    background: #d97706;
 }
 
 .btn-danger {
@@ -633,6 +736,187 @@ header h1 {
     color: var(--danger-color);
     padding: 20px;
     text-align: center;
+}
+
+.pending-notice, .error-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 15px;
+    border-radius: 8px;
+    width: 100%;
+}
+
+.pending-notice {
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: var(--warning-color);
+}
+
+.pending-notice i {
+    font-size: 24px;
+    animation: spin 2s linear infinite;
+}
+
+.error-notice {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: var(--danger-color);
+}
+
+.error-notice i {
+    font-size: 24px;
+    flex-shrink: 0;
+}
+
+.error-notice div {
+    flex: 1;
+}
+
+.error-notice strong {
+    display: block;
+    margin-bottom: 8px;
+}
+
+.error-notice p {
+    margin: 0;
+    font-size: 0.9em;
+    line-height: 1.5;
+    word-break: break-word;
+}
+
+/* Configuration Modal Styles */
+.config-modal h2 {
+    padding-bottom: 20px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.config-section {
+    margin-bottom: 30px;
+}
+
+.config-section h3 {
+    color: var(--text-color);
+    font-size: 1.2em;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.config-section h3 i {
+    color: var(--primary-color);
+    font-size: 1.1em;
+}
+
+.config-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    background: var(--surface-color);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    transition: background 0.2s;
+    gap: 15px;
+}
+
+.config-item:hover {
+    background: rgba(99, 102, 241, 0.05);
+}
+
+.config-key {
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-size: 0.95em;
+    flex-shrink: 0;
+}
+
+.config-value-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+}
+
+.config-value {
+    font-family: 'Monaco', 'Courier New', monospace;
+    color: var(--text-color);
+    background: var(--bg-color);
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    border: 1px solid var(--border-color);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: default;
+    transition: all 0.2s;
+}
+
+.config-value:hover {
+    overflow: visible;
+    white-space: normal;
+    word-break: break-all;
+    z-index: 10;
+    position: relative;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.config-copy-btn {
+    background: var(--primary-color);
+    border: none;
+    color: white;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.config-copy-btn:hover {
+    background: #5b5fc7;
+    transform: scale(1.05);
+}
+
+.config-copy-btn:active {
+    transform: scale(0.95);
+}
+
+.config-copy-btn.copied {
+    background: var(--success-color);
+}
+
+.config-copy-btn i {
+    font-size: 12px;
+}
+
+.config-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 15px;
+    background: rgba(99, 102, 241, 0.1);
+    border-radius: 8px;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    color: var(--primary-color);
+    font-size: 0.9em;
+    line-height: 1.5;
+}
+
+.config-note i {
+    font-size: 18px;
+    flex-shrink: 0;
+    margin-top: 2px;
 }
 
 footer {

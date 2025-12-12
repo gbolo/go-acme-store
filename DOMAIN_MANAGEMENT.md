@@ -54,18 +54,39 @@ You can manage domains using:
 
 ### Removing a Domain via UI
 
+The UI now provides **two removal options** for each domain:
+
+#### Option 1: Unmanage (Soft Delete) 🟠
 1. Click **"Manage Domains"** button
 2. Find the domain in the list
-3. Click the **"Remove"** button next to the domain
-4. Confirm the removal in the dialog
-5. Domain will be removed from managed list
-6. Certificate is marked as "unmanaged" but remains in Vault
+3. Click the **"Unmanage"** button (orange)
+4. Confirm in the dialog
+5. Domain removed from managed list
+6. Certificate marked as "unmanaged" but remains in Vault
+7. Certificate visible in dashboard with "Unmanaged" badge
 
-**Important**: 
-- **Soft Delete (Default)**: Certificate remains in Vault marked as "unmanaged"
-- Certificate will NOT be renewed automatically
-- Certificate can still be viewed in the dashboard with "Unmanaged" badge
-- To fully delete the certificate from Vault, use the API with `?delete_cert=true`
+**Use when:**
+- You want to stop renewing but keep certificate for reference
+- Temporarily disabling automatic renewal
+- Testing or troubleshooting
+
+#### Option 2: Delete (Hard Delete) 🔴
+1. Click **"Manage Domains"** button
+2. Find the domain in the list
+3. Click the **"Delete"** button (red)
+4. Read the **permanent deletion warning**
+5. Confirm deletion
+6. Domain removed from managed list
+7. Certificate **completely deleted** from Vault
+8. Certificate no longer visible anywhere
+
+**Use when:**
+- Permanently removing a domain
+- Cleaning up failed/invalid domains
+- Certificate no longer needed
+- Freeing up Vault storage
+
+**⚠️ Warning**: Hard delete is permanent and cannot be undone!
 
 ### Certificate Issuance After Adding Domain
 
@@ -357,6 +378,24 @@ The data structure is:
   - NOT renewed automatically
   - Remains visible in dashboard with "Unmanaged" badge
   - Certificate data preserved for reference
+
+**Issuance Status:**
+- **Pending (`status: "pending"`)**: 
+  - Certificate issuance in progress
+  - Domain appears immediately in UI
+  - Animated "Pending" badge shown
+  - No certificate data yet
+  
+- **Issued (`status: "issued"`)**: 
+  - Certificate successfully obtained
+  - Full certificate details available
+  - Can be viewed and downloaded
+  
+- **Failed (`status: "failed"`)**: 
+  - Certificate issuance failed
+  - Error message displayed in UI
+  - Shows "Failed" badge
+  - Can retry by removing and re-adding domain
 
 ## Error Handling
 

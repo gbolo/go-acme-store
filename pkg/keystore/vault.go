@@ -197,9 +197,14 @@ func (v *VaultKeystore) DeleteCertAndKey(domain string) error {
 
 // Domain management methods
 
+type ManagedDomain struct {
+	Domain string   `json:"domain" mapstructure:"domain"`
+	SANs   []string `json:"sans,omitempty" mapstructure:"sans"`
+}
+
 func (v *VaultKeystore) GetManagedDomains() (domains []string, err error) {
 	type managedDomains struct {
-		Domains []string `json:"domains" mapstructure:"domains"`
+		Domains []ManagedDomain `json:"domains" mapstructure:"domains"`
 	}
 	var md managedDomains
 	err = v.readDataIntoInterface(v.getManagedDomainsPath(), &md)
@@ -209,30 +214,63 @@ func (v *VaultKeystore) GetManagedDomains() (domains []string, err error) {
 	if md.Domains == nil {
 		return []string{}, nil
 	}
-	return md.Domains, nil
+	// Return just the domain names for backward compatibility
+	for _, d := range md.Domains {
+		domains = append(domains, d.Domain)
+	}
+	return domains, nil
+}
+
+func (v *VaultKeystore) GetManagedDomainWithSANs(domain string) (*ManagedDomain, error) {
+	type managedDomains struct {
+		Domains []ManagedDomain `json:"domains" mapstructure:"domains"`
+	}
+	var md managedDomains
+	err := v.readDataIntoInterface(v.getManagedDomainsPath(), &md)
+	if err != nil {
+		return nil, err
+	}
+	for _, d := range md.Domains {
+		if d.Domain == domain {
+			return &d, nil
+		}
+	}
+	return nil, fmt.Errorf("domain %s not found", domain)
 }
 
 func (v *VaultKeystore) AddManagedDomain(domain string) error {
-	// Get existing domains
-	domains, err := v.GetManagedDomains()
+	return v.AddManagedDomainWithSANs(domain, nil)
+}
+
+func (v *VaultKeystore) AddManagedDomainWithSANs(domain string, sans []string) error {
+	// Get existing managed domains with SANs
+	type managedDomains struct {
+		Domains []ManagedDomain `json:"domains" mapstructure:"domains"`
+	}
+	var md managedDomains
+	err := v.readDataIntoInterface(v.getManagedDomainsPath(), &md)
 	if err != nil {
 		// If it doesn't exist yet, create empty list
-		domains = []string{}
+		md.Domains = []ManagedDomain{}
 	}
 
 	// Check if domain already exists in managed list
-	for _, d := range domains {
-		if d == domain {
+	for _, d := range md.Domains {
+		if d.Domain == domain {
 			return fmt.Errorf("domain %s is already managed", domain)
 		}
 	}
 
-	// Add new domain
-	domains = append(domains, domain)
+	// Add new domain with SANs
+	newDomain := ManagedDomain{
+		Domain: domain,
+		SANs:   sans,
+	}
+	md.Domains = append(md.Domains, newDomain)
 
 	// Store back to vault
 	vaultData, err := encodeForVault(map[string]interface{}{
-		"domains": domains,
+		"domains": md.Domains,
 	})
 	if err != nil {
 		return err
@@ -243,7 +281,11 @@ func (v *VaultKeystore) AddManagedDomain(domain string) error {
 		return fmt.Errorf("failed to store managed domains: %v", err)
 	}
 
-	log.Infof("added managed domain: %s", domain)
+	if sans != nil && len(sans) > 0 {
+		log.Infof("added managed domain: %s with SANs: %v", domain, sans)
+	} else {
+		log.Infof("added managed domain: %s", domain)
+	}
 
 	// Check if certificate exists and is unmanaged, if so, flip it to managed
 	certAndKey, err := v.GetCertAndKey(domain)
@@ -262,17 +304,21 @@ func (v *VaultKeystore) AddManagedDomain(domain string) error {
 }
 
 func (v *VaultKeystore) RemoveManagedDomain(domain string) error {
-	// Get existing domains
-	domains, err := v.GetManagedDomains()
+	// Get existing managed domains with SANs
+	type managedDomains struct {
+		Domains []ManagedDomain `json:"domains" mapstructure:"domains"`
+	}
+	var md managedDomains
+	err := v.readDataIntoInterface(v.getManagedDomainsPath(), &md)
 	if err != nil {
 		return err
 	}
 
 	// Find and remove the domain
 	found := false
-	newDomains := []string{}
-	for _, d := range domains {
-		if d == domain {
+	newDomains := []ManagedDomain{}
+	for _, d := range md.Domains {
+		if d.Domain == domain {
 			found = true
 			continue
 		}

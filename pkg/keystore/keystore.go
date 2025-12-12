@@ -15,6 +15,7 @@ type Keystore interface {
 	// Domain management methods
 	GetManagedDomains() (domains []string, err error)
 	AddManagedDomain(domain string) error
+	AddManagedDomainWithSANs(domain string, sans []string) error
 	RemoveManagedDomain(domain string) error
 	IsManagedDomain(domain string) (bool, error)
 }

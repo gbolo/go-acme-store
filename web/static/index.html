@@ -82,9 +82,19 @@
                 
                 <div class="domain-add-section">
                     <h3>Add New Domain</h3>
-                    <div class="domain-input-group">
-                        <input type="text" id="newDomainInput" placeholder="example.com or *.example.com" />
-                        <button class="btn btn-primary" onclick="addDomain()">
+                    <div class="domain-form">
+                        <div class="form-group">
+                            <label for="newDomainInput">Domain (Common Name)</label>
+                            <input type="text" id="newDomainInput" placeholder="example.com or *.example.com" />
+                        </div>
+                        <div class="form-group">
+                            <label for="newSANsInput">
+                                Subject Alternative Names (SANs) 
+                                <span class="help-text">Optional, one per line or comma-separated</span>
+                            </label>
+                            <textarea id="newSANsInput" placeholder="www.example.com&#10;api.example.com" rows="3"></textarea>
+                        </div>
+                        <button class="btn btn-primary btn-add" onclick="addDomain()">
                             <i class="fi fi-rr-plus"></i>
                             <span>Add Domain</span>
                         </button>

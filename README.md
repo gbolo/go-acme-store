@@ -83,7 +83,9 @@ Set these environment variables for sensitive data:
 
 ### API - Domain Management
 - `GET /api/domains` - List all managed domains
-- `POST /api/domains` - Add a domain to manage (body: `{"domain": "example.com"}`)
+- `POST /api/domains` - Add a domain to manage
+  - Body: `{"domain": "example.com", "sans": ["www.example.com", "api.example.com"]}`
+  - SANs are optional
 - `DELETE /api/domains/{domain}` - Remove domain (soft delete - marks as unmanaged)
 - `DELETE /api/domains/{domain}?delete_cert=true` - Remove domain and delete certificate
 

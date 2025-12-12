@@ -2,6 +2,7 @@ package main
 
 import (
 	"go-acme-store/pkg/acme"
+	"go-acme-store/pkg/keystore"
 	"go-acme-store/pkg/log"
 	"sync"
 	"time"
@@ -73,7 +74,16 @@ func doAcmeOrders() {
 			continue
 		}
 		
-		err = acme.RenewCertIfNeeded(ks, domain, nil)
+		// Get SANs for this domain (if any)
+		var sans []string
+		if vks, ok := ks.(*keystore.VaultKeystore); ok {
+			managedDomain, err := vks.GetManagedDomainWithSANs(domain)
+			if err == nil && managedDomain != nil && managedDomain.SANs != nil {
+				sans = managedDomain.SANs
+			}
+		}
+		
+		err = acme.RenewCertIfNeeded(ks, domain, sans)
 		if err != nil {
 			log.Errorf("failed to obtain certificate for domain %s: %v", domain, err)
 		}

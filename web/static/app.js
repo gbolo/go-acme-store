@@ -352,9 +352,10 @@ async function loadDomains() {
 }
 
 async function addDomain() {
-    const input = document.getElementById('newDomainInput');
+    const domainInput = document.getElementById('newDomainInput');
+    const sansInput = document.getElementById('newSANsInput');
     const messageEl = document.getElementById('domainAddMessage');
-    const domain = input.value.trim();
+    const domain = domainInput.value.trim();
     
     if (!domain) {
         showMessage(messageEl, 'Please enter a domain name', 'error');
@@ -367,13 +368,35 @@ async function addDomain() {
         return;
     }
     
+    // Parse SANs (newline or comma-separated)
+    const sansText = sansInput.value.trim();
+    let sans = [];
+    if (sansText) {
+        sans = sansText.split(/[\n,]+/)
+            .map(s => s.trim())
+            .filter(s => s.length > 0);
+        
+        // Validate each SAN
+        for (const san of sans) {
+            if (!/^(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$/.test(san)) {
+                showMessage(messageEl, `Invalid SAN format: ${san}`, 'error');
+                return;
+            }
+        }
+    }
+    
     try {
+        const requestBody = { domain: domain };
+        if (sans.length > 0) {
+            requestBody.sans = sans;
+        }
+        
         const response = await fetch('/api/domains', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ domain: domain })
+            body: JSON.stringify(requestBody)
         });
         
         const data = await response.json();
@@ -382,8 +405,15 @@ async function addDomain() {
             throw new Error(data.error || 'Failed to add domain');
         }
         
-        showMessage(messageEl, `Domain ${domain} added successfully! Triggering certificate issuance...`, 'success');
-        input.value = '';
+        let message = `Domain ${domain} added successfully!`;
+        if (sans.length > 0) {
+            message += ` (with ${sans.length} SAN${sans.length > 1 ? 's' : ''})`;
+        }
+        message += ' Triggering certificate issuance...';
+        
+        showMessage(messageEl, message, 'success');
+        domainInput.value = '';
+        sansInput.value = '';
         
         // Reload domain list
         await loadDomains();

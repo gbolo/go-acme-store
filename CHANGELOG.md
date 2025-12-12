@@ -18,7 +18,7 @@
 
 - **Vault-based Domain Management**: Domains now managed via Vault instead of config file
   - Added `GET /api/domains` - List managed domains
-  - Added `POST /api/domains` - Add a domain
+  - Added `POST /api/domains` - Add a domain with optional SANs
   - Added `DELETE /api/domains/{domain}` - Remove domain (soft delete)
   - Added `DELETE /api/domains/{domain}?delete_cert=true` - Remove and delete certificate
   - Added `POST /api/trigger-renewal` - Manually trigger certificate issuance/renewal
@@ -27,6 +27,12 @@
   - Web UI includes "Manage Domains" modal for easy domain management
   - Real-time domain list updates in UI
   - Automatic certificate issuance when adding domains via Web UI
+  - **Subject Alternative Names (SANs) Support**: 
+    - UI allows entering multiple SANs when adding domains
+    - SANs can be entered one per line or comma-separated
+    - API accepts `sans` array in domain add request
+    - ACME now requests certificates for all domains (CN + SANs)
+    - SANs stored in Vault with domain configuration
   
 - **Certificate Management States**:
   - Added `managed` boolean field to certificates
@@ -99,6 +105,7 @@
 - Fixed nil pointer dereference in `GetAllDomains()` when Vault domain path is empty
 - Fixed `readDataIntoInterface()` to return nil error (not undefined) when no data exists
 - Fixed re-adding previously removed domains - now automatically marks certificate as managed
+- Fixed ACME function not using SANs parameter - now properly requests multi-domain certificates
 
 ### Technical Details
 - **Frontend Stack**: Vanilla JavaScript, CSS3, HTML5 (no frameworks required)

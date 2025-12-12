@@ -135,7 +135,8 @@ func handlerGetDomains(c *fiber.Ctx) (err error) {
 
 func handlerAddDomain(c *fiber.Ctx) (err error) {
 	type addDomainRequest struct {
-		Domain string `json:"domain"`
+		Domain string   `json:"domain"`
+		SANs   []string `json:"sans,omitempty"`
 	}
 	
 	var req addDomainRequest
@@ -151,18 +152,23 @@ func handlerAddDomain(c *fiber.Ctx) (err error) {
 		})
 	}
 	
-	err = ks.AddManagedDomain(req.Domain)
+	err = ks.AddManagedDomainWithSANs(req.Domain, req.SANs)
 	if err != nil {
 		return c.Status(400).JSON(&fiber.Map{
 			"error": fmt.Sprintf("failed to add domain: %v", err),
 		})
 	}
 	
-	log.Infof("domain %s added via API", req.Domain)
+	if req.SANs != nil && len(req.SANs) > 0 {
+		log.Infof("domain %s added via API with SANs: %v", req.Domain, req.SANs)
+	} else {
+		log.Infof("domain %s added via API", req.Domain)
+	}
 	
 	return c.Status(201).JSON(&fiber.Map{
 		"message": fmt.Sprintf("domain %s added successfully", req.Domain),
 		"domain":  req.Domain,
+		"sans":    req.SANs,
 	})
 }
 

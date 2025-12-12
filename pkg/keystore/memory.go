@@ -81,6 +81,10 @@ func (m *MemoryKeystore) GetManagedDomains() (domains []string, err error) {
 }
 
 func (m *MemoryKeystore) AddManagedDomain(domain string) error {
+	return m.AddManagedDomainWithSANs(domain, nil)
+}
+
+func (m *MemoryKeystore) AddManagedDomainWithSANs(domain string, sans []string) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	

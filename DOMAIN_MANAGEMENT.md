@@ -31,11 +31,20 @@ You can manage domains using:
 ### Adding a Domain via UI
 
 1. Click **"Manage Domains"** button
-2. Enter domain name in the input field (e.g., `example.com` or `*.example.com`)
-3. Click **"Add Domain"** button
-4. Success message will appear
-5. Domain will be added to the list
-6. Certificate will be automatically requested immediately
+2. Enter **domain name** (Common Name) in the first field (e.g., `example.com` or `*.example.com`)
+3. **Optional**: Enter **Subject Alternative Names (SANs)** in the second field
+   - One domain per line or comma-separated
+   - Example: `www.example.com, api.example.com`
+4. Click **"Add Domain"** button
+5. Success message will appear
+6. Domain will be added to the list
+7. Certificate will be automatically requested immediately with all SANs
+
+**Subject Alternative Names (SANs):**
+- SANs allow one certificate to be valid for multiple domains
+- Example: A certificate for `example.com` with SANs `www.example.com, api.example.com`
+- The main domain (CN) is automatically included
+- All SANs must pass DNS-01 challenges
 
 **Re-adding Previously Removed Domains:**
 - If domain was previously managed and still has a certificate in Vault
@@ -94,6 +103,7 @@ curl http://127.0.0.1:15872/api/domains
 
 ### Add a Domain
 
+**Simple domain (no SANs):**
 ```bash
 POST /api/domains
 Content-Type: application/json
@@ -110,20 +120,47 @@ curl -X POST http://127.0.0.1:15872/api/domains \
   -d '{"domain":"example.com"}'
 ```
 
+**Domain with SANs:**
+```bash
+POST /api/domains
+Content-Type: application/json
+
+{
+  "domain": "example.com",
+  "sans": ["www.example.com", "api.example.com", "app.example.com"]
+}
+```
+
+**Example:**
+```bash
+curl -X POST http://127.0.0.1:15872/api/domains \
+  -H "Content-Type: application/json" \
+  -d '{
+    "domain": "example.com",
+    "sans": ["www.example.com", "api.example.com"]
+  }'
+```
+
 **Response (201 Created):**
 ```json
 {
   "message": "domain example.com added successfully",
-  "domain": "example.com"
+  "domain": "example.com",
+  "sans": ["www.example.com", "api.example.com"]
 }
 ```
 
-**Wildcard domains:**
+**Wildcard domains with SANs:**
 ```bash
 curl -X POST http://127.0.0.1:15872/api/domains \
   -H "Content-Type: application/json" \
-  -d '{"domain":"*.example.com"}'
+  -d '{
+    "domain": "*.example.com",
+    "sans": ["example.com"]
+  }'
 ```
+
+**Note**: When requesting a certificate, the `domain` (Common Name) is automatically included along with all specified SANs.
 
 ### Remove a Domain
 

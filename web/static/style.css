@@ -472,31 +472,60 @@ header h1 {
     color: var(--text-color);
 }
 
-.domain-input-group {
+.domain-form {
     display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 15px;
 }
 
-.domain-input-group input {
-    flex: 1;
-    min-width: 200px;
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.form-group label {
+    font-size: 0.9em;
+    font-weight: 600;
+    color: var(--text-color);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.help-text {
+    font-weight: normal;
+    font-size: 0.85em;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.form-group input,
+.form-group textarea {
     padding: 12px 16px;
     background: var(--bg-color);
     border: 1px solid var(--border-color);
     border-radius: 6px;
     color: var(--text-color);
     font-size: 1em;
+    font-family: inherit;
     transition: border-color 0.2s;
+    resize: vertical;
 }
 
-.domain-input-group input:focus {
+.form-group input:focus,
+.form-group textarea:focus {
     outline: none;
     border-color: var(--primary-color);
 }
 
-.domain-input-group input::placeholder {
+.form-group input::placeholder,
+.form-group textarea::placeholder {
     color: var(--text-secondary);
+}
+
+.btn-add {
+    align-self: flex-start;
 }
 
 .domain-list-section {

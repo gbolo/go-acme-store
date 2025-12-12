@@ -23,5 +23,12 @@ vault:
   kv2_mount: kv
   # path (relative to mount) where we want to store our secrets
   kv2_secret_path: platform/acme
+  # skip TLS certificate verification (useful for self-signed certs in dev/test)
+  tls_skip_verify: false
   ## you should set this via env var instead
   #token: xxx
+
+# List of domains to manage (add your domains here)
+domains:
+  # - example.com
+  # - "*.example.com"

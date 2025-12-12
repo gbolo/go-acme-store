@@ -1,3 +1,4 @@
 .env
 .idea
 pkg/test
+testdata/config/lab.yml

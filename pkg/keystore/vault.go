@@ -1,13 +1,16 @@
 package keystore
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"go-acme-store/pkg/crypto"
+	"go-acme-store/pkg/log"
+	"net/http"
+
 	vault "github.com/hashicorp/vault/api"
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/viper"
-	"go-acme-store/pkg/crypto"
-	"go-acme-store/pkg/log"
 )
 
 type VaultKeystore struct {
@@ -72,11 +75,23 @@ func (v *VaultKeystore) readDataIntoInterface(path string, destInterface interfa
 func NewVaultKeystoreFromViper(accountEmail string) (Keystore, error) {
 	config := vault.DefaultConfig()
 	config.Address = viper.GetString("vault.address")
+
+	// Configure TLS settings if skip verify is enabled
+	if viper.GetBool("vault.tls_skip_verify") {
+		log.Warnf("Vault TLS certificate verification is DISABLED - not recommended for production")
+		tlsConfig := &tls.Config{
+			InsecureSkipVerify: true,
+		}
+		config.HttpClient.Transport = &http.Transport{
+			TLSClientConfig: tlsConfig,
+		}
+	}
+
 	client, _ := vault.NewClient(config)
 
 	// set a token only if one is specified
 	if viper.GetString("vault.token") != "" {
-		client.SetToken("vault.token")
+		client.SetToken(viper.GetString("vault.token"))
 	}
 
 	ks := VaultKeystore{
@@ -164,6 +179,9 @@ func (v *VaultKeystore) StoreCertAndKey(domain string, data CertAndKey) (err err
 func encodeForVault(input interface{}) (output map[string]interface{}, err error) {
 	var inputData map[string]interface{}
 	dataBytes, err := json.Marshal(input)
+	if err != nil {
+		return nil, fmt.Errorf("could not marshal json: %v", err)
+	}
 	err = json.Unmarshal(dataBytes, &inputData)
 	if err != nil {
 		return nil, fmt.Errorf("could not unmarshal json: %v", err)

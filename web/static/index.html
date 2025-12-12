@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACME Certificate Manager</title>
+    <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-rounded/css/uicons-regular-rounded.css'>
+    <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.6.0/uicons-bold-rounded/css/uicons-bold-rounded.css'>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
+                </svg>
+            </div>
+            <h1>ACME Certificate Manager</h1>
+            <p class="subtitle">Monitor and manage your SSL/TLS certificates</p>
+        </header>
+
+        <div class="stats-container" id="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="totalCerts">-</div>
+                <div class="stat-label">Total Certificates</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="validCerts">-</div>
+                <div class="stat-label">Valid</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="expiringSoon">-</div>
+                <div class="stat-label">Expiring Soon</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="expiredCerts">-</div>
+                <div class="stat-label">Expired</div>
+            </div>
+        </div>
+
+        <div class="refresh-container">
+            <button id="refreshBtn" class="refresh-btn" onclick="loadCertificates()">
+                <svg id="refreshIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                </svg>
+                <span>Refresh</span>
+            </button>
+            <span id="lastUpdated" class="last-updated"></span>
+        </div>
+
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>Loading certificates...</p>
+        </div>
+
+        <div id="error" class="error-message" style="display: none;"></div>
+
+        <div id="certificates" class="certificates-container"></div>
+
+        <!-- Modal for certificate details -->
+        <div id="certModal" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="closeModal()">&times;</span>
+                <h2 id="modalTitle"></h2>
+                <div id="modalBody"></div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>ACME Certificate Store - Powered by HashiCorp Vault</p>
+    </footer>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
+

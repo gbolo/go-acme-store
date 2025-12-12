@@ -2,3 +2,5 @@
 .idea
 pkg/test
 testdata/config/lab.yml
+bin/
+acme-store

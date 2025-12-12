@@ -28,7 +28,7 @@ vault:
   ## you should set this via env var instead
   #token: xxx
 
-# List of domains to manage (add your domains here)
-domains:
-  # - example.com
-  # - "*.example.com"
+# NOTE: Domains are now managed via Vault using the API endpoints:
+# - GET    /api/domains           - List managed domains
+# - POST   /api/domains           - Add a domain
+# - DELETE /api/domains/{domain}  - Remove a domain

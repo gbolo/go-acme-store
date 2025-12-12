@@ -20,7 +20,7 @@ async function loadCertificates() {
     refreshBtn.classList.add('loading');
 
     try {
-        const response = await fetch('/certs');
+        const response = await fetch('/api/certs');
         
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -105,7 +105,10 @@ function createCertificateCard(cert, index) {
     card.innerHTML = `
         <div class="cert-header">
             <div class="cert-title">
-                <div class="cert-name">${escapeHtml(cert.common_name)}</div>
+                <div class="cert-name-row">
+                    <div class="cert-name">${escapeHtml(cert.common_name)}</div>
+                    ${cert.managed ? '<span class="managed-badge">Managed</span>' : '<span class="unmanaged-badge">Unmanaged</span>'}
+                </div>
                 <div class="cert-issuer">Issuer: ${cert.issuers && cert.issuers.length > 0 ? escapeHtml(cert.issuers[0]) : 'Unknown'}</div>
             </div>
             <div class="cert-status status-${status.class}">${status.text}</div>
@@ -241,9 +244,14 @@ function closeModal() {
 
 // Close modal when clicking outside
 window.onclick = function(event) {
-    const modal = document.getElementById('certModal');
-    if (event.target == modal) {
-        modal.style.display = 'none';
+    const certModal = document.getElementById('certModal');
+    const domainModal = document.getElementById('domainModal');
+    
+    if (event.target == certModal) {
+        certModal.style.display = 'none';
+    }
+    if (event.target == domainModal) {
+        domainModal.style.display = 'none';
     }
 }
 
@@ -273,5 +281,179 @@ function escapeForJs(text) {
                .replace(/"/g, '\\"')
                .replace(/\n/g, '\\n')
                .replace(/\r/g, '\\r');
+}
+
+// Domain Management Functions
+
+async function showDomainManager() {
+    const modal = document.getElementById('domainModal');
+    modal.style.display = 'block';
+    
+    // Clear previous message
+    document.getElementById('domainAddMessage').style.display = 'none';
+    document.getElementById('newDomainInput').value = '';
+    
+    // Load domains
+    await loadDomains();
+}
+
+function closeDomainModal() {
+    const modal = document.getElementById('domainModal');
+    modal.style.display = 'none';
+}
+
+async function loadDomains() {
+    const loadingEl = document.getElementById('domainLoading');
+    const listEl = document.getElementById('domainList');
+    const countEl = document.getElementById('domainCount');
+    
+    loadingEl.style.display = 'flex';
+    listEl.innerHTML = '';
+    
+    try {
+        const response = await fetch('/api/domains');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const domains = data.domains || [];
+        
+        loadingEl.style.display = 'none';
+        countEl.textContent = domains.length;
+        
+        if (domains.length === 0) {
+            listEl.innerHTML = '<div class="no-domains">No domains configured. Add your first domain above.</div>';
+            return;
+        }
+        
+        domains.forEach(domain => {
+            const domainItem = document.createElement('div');
+            domainItem.className = 'domain-item';
+            domainItem.innerHTML = `
+                <div class="domain-name">
+                    <i class="fi fi-rr-globe"></i>
+                    <span>${escapeHtml(domain)}</span>
+                </div>
+                <button class="btn btn-danger btn-small" onclick="removeDomain('${escapeForJs(domain)}')">
+                    <i class="fi fi-rr-trash"></i>
+                    <span>Remove</span>
+                </button>
+            `;
+            listEl.appendChild(domainItem);
+        });
+        
+    } catch (error) {
+        console.error('Error loading domains:', error);
+        loadingEl.style.display = 'none';
+        listEl.innerHTML = `<div class="error-text">Failed to load domains: ${error.message}</div>`;
+    }
+}
+
+async function addDomain() {
+    const input = document.getElementById('newDomainInput');
+    const messageEl = document.getElementById('domainAddMessage');
+    const domain = input.value.trim();
+    
+    if (!domain) {
+        showMessage(messageEl, 'Please enter a domain name', 'error');
+        return;
+    }
+    
+    // Basic validation
+    if (!/^(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$/.test(domain)) {
+        showMessage(messageEl, 'Invalid domain format', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/domains', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ domain: domain })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to add domain');
+        }
+        
+        showMessage(messageEl, `Domain ${domain} added successfully! Triggering certificate issuance...`, 'success');
+        input.value = '';
+        
+        // Reload domain list
+        await loadDomains();
+        
+        // Trigger certificate renewal/issuance
+        await triggerRenewal();
+        
+        // Reload certificates after a delay (give time for cert to be issued)
+        setTimeout(() => {
+            loadCertificates();
+        }, 5000);
+        
+    } catch (error) {
+        console.error('Error adding domain:', error);
+        showMessage(messageEl, error.message, 'error');
+    }
+}
+
+async function removeDomain(domain) {
+    if (!confirm(`Are you sure you want to remove ${domain}?\n\nNote: The certificate will remain in Vault but won't be renewed.`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/domains/${encodeURIComponent(domain)}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to remove domain');
+        }
+        
+        // Reload domain list
+        await loadDomains();
+        
+        // Optionally reload certificates
+        loadCertificates();
+        
+    } catch (error) {
+        console.error('Error removing domain:', error);
+        alert(`Failed to remove domain: ${error.message}`);
+    }
+}
+
+function showMessage(element, message, type) {
+    element.textContent = message;
+    element.className = `message message-${type}`;
+    element.style.display = 'block';
+    
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+        element.style.display = 'none';
+    }, 5000);
+}
+
+async function triggerRenewal() {
+    try {
+        const response = await fetch('/api/trigger-renewal', {
+            method: 'POST'
+        });
+        
+        if (!response.ok) {
+            console.warn('Failed to trigger renewal:', response.status);
+        } else {
+            console.log('Certificate renewal triggered successfully');
+        }
+    } catch (error) {
+        console.error('Error triggering renewal:', error);
+    }
 }
 

@@ -26,6 +26,7 @@ The main dashboard provides an at-a-glance view of all your certificates with:
 - View all managed certificates in a clean, organized layout
 - Each certificate card displays:
   - Common Name (domain)
+  - Management status ("Managed" or "Unmanaged" badge)
   - Issuer information
   - Issue date and expiration date
   - Days until expiration
@@ -44,19 +45,27 @@ Real-time statistics showing:
 - **View Full Chain**: Display the complete certificate chain
 - **Copy to Clipboard**: One-click copy functionality for certificates
 
-### 4. Status Indicators
+### 4. Domain Management (NEW)
+- **Manage Domains Button**: Opens domain management modal
+- **View Managed Domains**: List of all domains being managed
+- **Add Domain**: Form to add new domains with validation
+- **Remove Domain**: Remove domains with confirmation dialog
+- **Real-time Updates**: Domain list updates immediately after changes
+- **Domain Count**: Shows total number of managed domains
+
+### 5. Status Indicators
 Visual badges indicating certificate health:
 - **VALID**: Certificate is valid and not expiring soon
 - **EXPIRING SOON**: Certificate expires within 30 days
 - **EXPIRED**: Certificate has already expired
 
-### 5. Responsive Design
+### 6. Responsive Design
 - Mobile-friendly interface
 - Adapts to different screen sizes
 - Touch-friendly buttons and controls
 - Optimized for both desktop and mobile browsers
 
-### 6. User Experience
+### 7. User Experience
 - **Smooth Animations**: Transitions and hover effects
 - **Loading States**: Spinner during data fetch
 - **Error Handling**: Clear error messages if API fails

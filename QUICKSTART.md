@@ -39,12 +39,9 @@ vault:
   kv2_mount: kv
   kv2_secret_path: platform/acme
   tls_skip_verify: false  # Set to true for self-signed certs
-
-# Add your domains here
-domains:
-  - example.com
-  - "*.example.com"
 ```
+
+**Note**: Domains are now managed via API (see step 5 below).
 
 ### 2. Set Environment Variables
 
@@ -79,15 +76,40 @@ You should see output like:
 INFO vault client was initialized
 INFO loaded 2 domain(s) from configuration: [example.com *.example.com]
 INFO server listening on 127.0.0.1:15872
-INFO web UI available at http://127.0.0.1:15872
+INFO web UI available at http://127.0.0.1:15872/ui
+INFO api available at http://127.0.0.1:15872/api
 ```
 
-### 5. Access the Web UI
+### 5. Add Domains to Manage
+
+**Option A: Via Web UI (Recommended)**
+1. Open `http://127.0.0.1:15872/ui`
+2. Click "Manage Domains" button
+3. Enter domain name and click "Add Domain"
+4. Certificate will be automatically requested
+
+**Option B: Via API**
+```bash
+# Add a domain
+curl -X POST http://127.0.0.1:15872/api/domains \
+  -H "Content-Type: application/json" \
+  -d '{"domain":"example.com"}'
+
+# Trigger certificate issuance
+curl -X POST http://127.0.0.1:15872/api/trigger-renewal
+
+# List managed domains
+curl http://127.0.0.1:15872/api/domains
+```
+
+### 6. Access the Web UI
 
 Open your browser and navigate to:
 ```
-http://127.0.0.1:15872
+http://127.0.0.1:15872/ui
 ```
+
+Or just visit `http://127.0.0.1:15872/` and you'll be redirected to the UI.
 
 ## Web UI Features
 
@@ -154,7 +176,7 @@ acme:
 ### Web UI shows no certificates
 - Check if domains are configured in `config.yml`
 - Verify certificates have been successfully issued (check logs)
-- Try the `/certs` API endpoint directly: `curl http://127.0.0.1:15872/certs`
+- Try the `/api/certs` API endpoint directly: `curl http://127.0.0.1:15872/api/certs`
 
 ### Certificate renewal not working
 - The daemon checks certificates every 24 hours
@@ -171,17 +193,23 @@ acme:
 Test the API directly:
 
 ```bash
-# Get all certificates
-curl http://127.0.0.1:15872/certs | jq
+# Domain Management
+curl http://127.0.0.1:15872/api/domains                    # List domains
+curl -X POST http://127.0.0.1:15872/api/domains \
+  -H "Content-Type: application/json" \
+  -d '{"domain":"example.com"}'                            # Add domain
+curl -X DELETE http://127.0.0.1:15872/api/domains/example.com  # Remove domain
 
-# Health check
-curl http://127.0.0.1:15872/healthz
+# ACME Operations
+curl -X POST http://127.0.0.1:15872/api/trigger-renewal    # Trigger cert issuance/renewal
 
-# Version info
-curl http://127.0.0.1:15872/version
+# Certificates
+curl http://127.0.0.1:15872/api/certs | jq                # Get all certificates
 
-# Metrics
-curl http://127.0.0.1:15872/metrics
+# System
+curl http://127.0.0.1:15872/api/healthz                    # Health check
+curl http://127.0.0.1:15872/api/version                    # Version info
+curl http://127.0.0.1:15872/metrics                        # Metrics
 ```
 
 ## Next Steps

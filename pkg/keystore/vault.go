@@ -35,6 +35,10 @@ func (v *VaultKeystore) getDomainPath(domain string) string {
 	return fmt.Sprintf("%s/domain/%s", v.getBasePath(), domain)
 }
 
+func (v *VaultKeystore) getManagedDomainsPath() string {
+	return fmt.Sprintf("%s/managed-domains", v.getBasePath())
+}
+
 func (v *VaultKeystore) storeAccount(account AcmeAccount) (err error) {
 	vaultData, err := encodeForVault(account)
 	if err != nil {
@@ -59,12 +63,12 @@ func (v *VaultKeystore) readDataIntoInterface(path string, destInterface interfa
 	}
 	if vaultData == nil {
 		log.Debugf("no secrets found in path %s", path)
-		return
+		return nil
 	}
 
 	if _, exists := vaultData.Data["data"]; !exists {
 		log.Debugf("no data found in secret path %s", path)
-		return
+		return nil
 	}
 
 	log.Debugf("loaded data from secret path %s", path)
@@ -140,8 +144,14 @@ func (v *VaultKeystore) GetAllDomains() (domains []string, err error) {
 		return
 	}
 
+	// Return empty list if result is nil (path doesn't exist)
+	if result == nil {
+		return []string{}, nil
+	}
+
+	// Return empty list if no keys exist
 	if _, exists := result.Data["keys"]; !exists {
-		return
+		return []string{}, nil
 	}
 
 	for _, domain := range result.Data["keys"].([]interface{}) {
@@ -170,10 +180,139 @@ func (v *VaultKeystore) StoreCertAndKey(domain string, data CertAndKey) (err err
 		return
 	}
 	result, err := v.client.Logical().Write(v.getDomainPath(domain), vaultData)
-	if err != nil {
+	if err == nil {
 		log.Infof("stored cert and key for %s -> %s version %v", domain, v.getDomainPath(domain), result.Data["version"])
 	}
 	return
+}
+
+func (v *VaultKeystore) DeleteCertAndKey(domain string) error {
+	_, err := v.client.Logical().Delete(v.getDomainPath(domain))
+	if err != nil {
+		return fmt.Errorf("failed to delete cert for domain %s: %v", domain, err)
+	}
+	log.Infof("deleted cert and key for %s from %s", domain, v.getDomainPath(domain))
+	return nil
+}
+
+// Domain management methods
+
+func (v *VaultKeystore) GetManagedDomains() (domains []string, err error) {
+	type managedDomains struct {
+		Domains []string `json:"domains" mapstructure:"domains"`
+	}
+	var md managedDomains
+	err = v.readDataIntoInterface(v.getManagedDomainsPath(), &md)
+	if err != nil {
+		return nil, err
+	}
+	if md.Domains == nil {
+		return []string{}, nil
+	}
+	return md.Domains, nil
+}
+
+func (v *VaultKeystore) AddManagedDomain(domain string) error {
+	// Get existing domains
+	domains, err := v.GetManagedDomains()
+	if err != nil {
+		// If it doesn't exist yet, create empty list
+		domains = []string{}
+	}
+
+	// Check if domain already exists in managed list
+	for _, d := range domains {
+		if d == domain {
+			return fmt.Errorf("domain %s is already managed", domain)
+		}
+	}
+
+	// Add new domain
+	domains = append(domains, domain)
+
+	// Store back to vault
+	vaultData, err := encodeForVault(map[string]interface{}{
+		"domains": domains,
+	})
+	if err != nil {
+		return err
+	}
+
+	_, err = v.client.Logical().Write(v.getManagedDomainsPath(), vaultData)
+	if err != nil {
+		return fmt.Errorf("failed to store managed domains: %v", err)
+	}
+
+	log.Infof("added managed domain: %s", domain)
+
+	// Check if certificate exists and is unmanaged, if so, flip it to managed
+	certAndKey, err := v.GetCertAndKey(domain)
+	if err == nil && certAndKey.CommonName != "" && !certAndKey.Managed {
+		log.Infof("found existing unmanaged certificate for %s, marking as managed", domain)
+		certAndKey.Managed = true
+		err = v.StoreCertAndKey(domain, certAndKey)
+		if err != nil {
+			log.Warnf("failed to update certificate managed status for %s: %v", domain, err)
+		} else {
+			log.Infof("certificate for %s is now managed and will be renewed", domain)
+		}
+	}
+
+	return nil
+}
+
+func (v *VaultKeystore) RemoveManagedDomain(domain string) error {
+	// Get existing domains
+	domains, err := v.GetManagedDomains()
+	if err != nil {
+		return err
+	}
+
+	// Find and remove the domain
+	found := false
+	newDomains := []string{}
+	for _, d := range domains {
+		if d == domain {
+			found = true
+			continue
+		}
+		newDomains = append(newDomains, d)
+	}
+
+	if !found {
+		return fmt.Errorf("domain %s is not managed", domain)
+	}
+
+	// Store back to vault
+	vaultData, err := encodeForVault(map[string]interface{}{
+		"domains": newDomains,
+	})
+	if err != nil {
+		return err
+	}
+
+	_, err = v.client.Logical().Write(v.getManagedDomainsPath(), vaultData)
+	if err != nil {
+		return fmt.Errorf("failed to store managed domains: %v", err)
+	}
+
+	log.Infof("removed managed domain: %s", domain)
+	return nil
+}
+
+func (v *VaultKeystore) IsManagedDomain(domain string) (bool, error) {
+	domains, err := v.GetManagedDomains()
+	if err != nil {
+		return false, err
+	}
+
+	for _, d := range domains {
+		if d == domain {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func encodeForVault(input interface{}) (output map[string]interface{}, err error) {

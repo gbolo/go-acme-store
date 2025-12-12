@@ -7,6 +7,7 @@ A Go application that automates ACME certificate management and stores certifica
 - 🔐 **Automated ACME Certificate Management**: Automatically obtains and renews SSL/TLS certificates using the ACME protocol
 - 🏦 **HashiCorp Vault Integration**: Securely stores certificates and private keys in Vault's KV v2 secrets engine
 - 🌐 **Modern Web UI**: Beautiful, responsive web interface to monitor and manage certificates
+- ⚙️ **Domain Management**: Add/remove domains via Web UI or REST API without restarting
 - 🔄 **Automatic Renewal**: Monitors certificate expiration and automatically renews certificates
 - 📊 **Real-time Statistics**: Dashboard showing certificate status, expiration dates, and health metrics
 - 🔍 **DNS Challenge Support**: Currently supports DigitalOcean DNS provider for DNS-01 challenges
@@ -58,12 +59,9 @@ vault:
   kv2_secret_path: platform/acme
   # skip TLS certificate verification (useful for self-signed certs in dev/test)
   tls_skip_verify: false
-
-# List of domains to manage
-domains:
-  - example.com
-  - "*.example.com"
 ```
+
+**Note**: Domains are now managed via Vault using the API endpoints (see API section below).
 
 ### Environment Variables
 
@@ -75,10 +73,28 @@ Set these environment variables for sensitive data:
 
 ## API Endpoints
 
-- `GET /` - Web UI dashboard
-- `GET /certs` - JSON API returning all certificates with details
-- `GET /healthz` - Health check endpoint
-- `GET /version` - Application version information
+### Web UI
+- `GET /` - Redirects to `/ui`
+- `GET /ui` - Web UI dashboard
+- `GET /ui/static/*` - Static assets (CSS, JS, images)
+
+### API - Certificates
+- `GET /api/certs` - JSON API returning all certificates with details
+
+### API - Domain Management
+- `GET /api/domains` - List all managed domains
+- `POST /api/domains` - Add a domain to manage (body: `{"domain": "example.com"}`)
+- `DELETE /api/domains/{domain}` - Remove domain (soft delete - marks as unmanaged)
+- `DELETE /api/domains/{domain}?delete_cert=true` - Remove domain and delete certificate
+
+### API - ACME Operations
+- `POST /api/trigger-renewal` - Manually trigger certificate issuance/renewal for all managed domains
+
+### API - System
+- `GET /api/healthz` - Health check endpoint
+- `GET /api/version` - Application version information
+
+### Monitoring
 - `GET /metrics` - Server metrics and monitoring
 
 ## Building and Running
@@ -118,7 +134,7 @@ The application will:
 3. Start the ACME daemon for certificate management
 4. Start the HTTP server with web UI
 
-Access the web UI at: `http://127.0.0.1:15872/`
+Access the web UI at: `http://127.0.0.1:15872/ui`
 
 ## Project Structure
 

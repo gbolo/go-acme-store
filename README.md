@@ -101,6 +101,23 @@ Set these environment variables for sensitive data:
 ### Monitoring
 - `GET /metrics` - Server metrics and monitoring
 
+## Components
+
+This project includes two applications:
+
+### 1. acme-store (Main Daemon)
+- Obtains and renews ACME certificates automatically
+- Stores certificates in HashiCorp Vault
+- Provides Web UI for management
+- Exposes REST API for automation
+
+### 2. acme-store-fetcher (CLI Tool)
+- Fetches certificates from Vault
+- Exports to disk as PEM files
+- Generates Traefik configuration automatically
+- Useful for deploying to web servers (nginx, Apache, Traefik, HAProxy, etc.)
+- See [FETCHER.md](FETCHER.md) for details
+
 ## Building and Running
 
 ### Prerequisites
@@ -112,7 +129,11 @@ Set these environment variables for sensitive data:
 ### Build
 
 ```bash
+# Build main daemon
 go build -o acme-store ./cmd/acme-store
+
+# Build fetcher tool
+go build -o acme-store-fetcher ./cmd/acme-store-fetcher
 ```
 
 ### Run

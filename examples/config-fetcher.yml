@@ -1,0 +1,34 @@
+# Example configuration for acme-store-fetcher
+# This shows the fetcher-specific options that can be configured
+
+log:
+  level: INFO
+
+# Fetcher configuration
+fetcher:
+  # Directory where certificate files will be saved
+  # Default: ./certs
+  output_dir: "/etc/ssl/acme-certs"
+  
+  # Optional: Generate Traefik configuration file
+  # Uncomment to enable Traefik config generation
+  traefik_config: "/etc/traefik/dynamic/acme-certs.yml"
+
+# Vault configuration (required)
+vault:
+  address: "http://127.0.0.1:8200"
+  kv2_mount: kv
+  kv2_secret_path: platform/acme
+  tls_skip_verify: false
+  # Set via environment variable: VAULT_TOKEN=xxx
+
+# ACME configuration (only account_email is used by fetcher)
+acme:
+  account_email: acme@example.com
+  # Other ACME settings are ignored by fetcher
+
+# Note: Command-line flags override these settings
+# Example:
+#   acme-store-fetcher -output-dir /custom/path
+# This will use /custom/path instead of the config file value
+

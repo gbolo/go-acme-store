@@ -4,18 +4,20 @@ go 1.21.0
 
 require (
 	github.com/caddyserver/certmagic v0.19.2
+	github.com/fsnotify/fsnotify v1.6.0
 	github.com/gofiber/fiber/v2 v2.49.1
 	github.com/hashicorp/vault/api v1.0.4
 	github.com/libdns/digitalocean v0.0.0-20230728223659-4f9064657aea
 	github.com/mholt/acmez v1.2.0
+	github.com/mitchellh/mapstructure v1.5.0
 	github.com/spf13/viper v1.16.0
 	go.uber.org/zap v1.25.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
 	github.com/andybalholm/brotli v1.0.5 // indirect
 	github.com/digitalocean/godo v1.41.0 // indirect
-	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/golang/snappy v0.0.3 // indirect
 	github.com/google/go-querystring v1.0.0 // indirect
@@ -37,7 +39,6 @@ require (
 	github.com/mattn/go-runewidth v0.0.15 // indirect
 	github.com/miekg/dns v1.1.55 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
-	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.8 // indirect
 	github.com/pierrec/lz4 v2.5.2+incompatible // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
@@ -65,5 +66,4 @@ require (
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

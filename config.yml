@@ -28,6 +28,14 @@ vault:
   ## you should set this via env var instead
   #token: xxx
 
+# Fetcher configuration (for acme-store-fetcher)
+# These can be overridden with command-line flags
+fetcher:
+  # Directory to save certificate files
+  output_dir: "./certs"
+  # Path to write Traefik configuration file (optional)
+  # traefik_config: "/etc/traefik/dynamic/acme-certs.yml"
+
 # NOTE: Domains are now managed via Vault using the API endpoints:
 # - GET    /api/domains           - List managed domains
 # - POST   /api/domains           - Add a domain

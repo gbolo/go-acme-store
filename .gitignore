@@ -1,6 +1,8 @@
 .env
 .idea
 pkg/test
-testdata/config/lab.yml
+testdata/config/lab*
 bin/
 acme-store
+acme-store-fetcher
+certs/

@@ -3,6 +3,19 @@
 ## [Unreleased] - 2025-12-12
 
 ### Added
+
+- **New CLI Tool: acme-store-fetcher**:
+    - Fetches certificates from Vault and saves to disk
+    - Exports full certificate chain and private keys as PEM files
+    - Handles wildcard domains (replaces `*` with `_wild_`)
+    - Configurable output directory (via flag or config file)
+    - Skips invalid/pending/failed certificates automatically
+    - Detailed logging and summary report
+    - Exit codes for automation
+    - **Traefik configuration generation** - automatically create Traefik-compatible YAML
+    - **Viper integration** - configure via `config.yml` (`fetcher.output_dir`, `fetcher.traefik_config`)
+    - Perfect for deploying certificates to web servers
+    - See `FETCHER.md` for complete documentation
 - **Command-line Flag**: Added `-config` flag to specify custom configuration file path
   - Precedence: flag > CONFIG_FILE env var > default (./config.yml)
   

@@ -93,7 +93,14 @@ func RenewCertIfNeeded(ks keystore.Keystore, cn string, sans []string) (err erro
 		return fmt.Errorf("generating certificate key: %v", err)
 	}
 
-	certs, err := client.ObtainCertificate(ctx, *account, certPrivateKey, []string{cn})
+	// Build list of domains: CN + SANs
+	domains := []string{cn}
+	if sans != nil && len(sans) > 0 {
+		domains = append(domains, sans...)
+		log.Infof("requesting certificate for %s with SANs: %v", cn, sans)
+	}
+
+	certs, err := client.ObtainCertificate(ctx, *account, certPrivateKey, domains)
 	if err != nil || len(certs) == 0 {
 		return fmt.Errorf("obtaining certificate: %v", err)
 	}

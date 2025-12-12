@@ -11,6 +11,13 @@ type Keystore interface {
 	StoreCertAndKey(domain string, data CertAndKey) error
 	GetCertAndKey(domain string) (data CertAndKey, err error)
 	GetLeafCert(domain string) (cert string, err error)
+	DeleteCertAndKey(domain string) error
+	// Domain management methods
+	GetManagedDomains() (domains []string, err error)
+	AddManagedDomain(domain string) error
+	AddManagedDomainWithSANs(domain string, sans []string) error
+	RemoveManagedDomain(domain string) error
+	IsManagedDomain(domain string) (bool, error)
 }
 
 type AcmeAccount struct {
@@ -28,6 +35,9 @@ type CertAndKey struct {
 	Expiration    string   `json:"expires_on" mapstructure:"expires_on"`
 	CommonName    string   `json:"common_name" mapstructure:"common_name"`
 	SANs          []string `json:"sans" mapstructure:"sans"`
+	Managed       bool     `json:"managed" mapstructure:"managed"`
+	Status        string   `json:"status" mapstructure:"status"`         // "pending", "issued", "failed"
+	Error         string   `json:"error,omitempty" mapstructure:"error"` // Error message if status is "failed"
 }
 
 func (c *CertAndKey) populateMissingFields() (err error) {
@@ -51,6 +61,8 @@ func NewCertAndKey(certChain, privateKey, certURL string) (CertAndKey, error) {
 		CertChainPEM:  certChain,
 		CertChainURL:  certURL,
 		PrivateKeyPEM: privateKey,
+		Managed:       true,     // New certificates are managed by default
+		Status:        "issued", // Successfully issued
 	}
 	err := data.populateMissingFields()
 	return data, err

@@ -26,11 +26,19 @@ The main dashboard provides an at-a-glance view of all your certificates with:
 - View all managed certificates in a clean, organized layout
 - Each certificate card displays:
   - Common Name (domain)
+  - Management status ("Managed" or "Unmanaged" badge)
+  - Issuance status ("Pending", "Issued", or "Failed")
   - Issuer information
   - Issue date and expiration date
   - Days until expiration
-  - Certificate status badge
+  - Certificate status badge (Valid/Expiring/Expired)
   - Subject Alternative Names (SANs)
+  - Error messages for failed issuance
+
+**Certificate States:**
+- **Pending**: Certificate issuance in progress (animated indicator)
+- **Issued**: Certificate successfully issued and valid
+- **Failed**: Certificate issuance failed (shows error message)
 
 ### 2. Statistics Overview
 Real-time statistics showing:
@@ -44,19 +52,45 @@ Real-time statistics showing:
 - **View Full Chain**: Display the complete certificate chain
 - **Copy to Clipboard**: One-click copy functionality for certificates
 
-### 4. Status Indicators
+### 4. Configuration Viewer (NEW)
+- **View Config Button**: Opens configuration viewer modal
+- **Non-Sensitive Display**: Only shows safe configuration values
+- **Organized Sections**: 
+  - Logging configuration
+  - Server settings
+  - ACME provider settings
+  - Vault connection details
+- **Security Note**: Tokens and secrets are never displayed
+- **Color Coding**: Warning color for insecure settings (e.g., TLS skip verify)
+- **Use Cases**: 
+  - Verify settings without file access
+  - Troubleshoot configuration issues
+  - Confirm ACME directory (staging vs production)
+
+### 5. Domain Management
+- **Manage Domains Button**: Opens domain management modal
+- **View Managed Domains**: List of all domains being managed
+- **Add Domain**: Form to add new domains with SANs and validation
+- **Remove Options**:
+  - "Unmanage" button (orange) - Soft delete, keeps certificate
+  - "Delete" button (red) - Hard delete, removes from Vault permanently
+- **Confirmation Dialogs**: Different warnings for soft vs hard delete
+- **Real-time Updates**: Domain list updates immediately after changes
+- **Domain Count**: Shows total number of managed domains
+
+### 5. Status Indicators
 Visual badges indicating certificate health:
 - **VALID**: Certificate is valid and not expiring soon
 - **EXPIRING SOON**: Certificate expires within 30 days
 - **EXPIRED**: Certificate has already expired
 
-### 5. Responsive Design
+### 6. Responsive Design
 - Mobile-friendly interface
 - Adapts to different screen sizes
 - Touch-friendly buttons and controls
 - Optimized for both desktop and mobile browsers
 
-### 6. User Experience
+### 7. User Experience
 - **Smooth Animations**: Transitions and hover effects
 - **Loading States**: Spinner during data fetch
 - **Error Handling**: Clear error messages if API fails

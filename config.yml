@@ -14,7 +14,9 @@ acme:
   account_email: acme-store@devnull
 
   # (optional) DNS server to use for validating dns challenge (overrides the system dns)
-  # dns_server: 8.8.8.8:53
+  # NOTE: it's a good idea to use an external DNS server to validate the dns challenge
+  #       since your local network may be overriding the public zone for your domain(s)
+  dns_server: 8.8.8.8:53
   
   # DNS provider: "digitalocean", "acmedns", or "powerdns"
   dns_provider: digitalocean

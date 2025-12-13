@@ -2,7 +2,7 @@
 
 ## Overview
 
-The ACME Certificate Store now includes a modern, responsive web interface for monitoring and managing SSL/TLS certificates stored in HashiCorp Vault.
+The ACME Certificate Store now includes a modern, responsive web interface for monitoring and managing SSL/TLS certificates.
 
 ## Screenshots & Preview
 

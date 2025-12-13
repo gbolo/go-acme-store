@@ -1,0 +1,46 @@
+name: Integration Tests
+
+on:
+
+  pull_request:
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup mise
+        uses: jdx/mise-action@v3
+        with:
+          install: true
+          experimental: true
+      
+      - name: Start test environment
+        run: make test-setup
+            
+      - name: Run integration tests
+        run: make test-integration
+        env:
+          VAULT_TOKEN: root
+      
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          echo "=== Docker Compose Services ==="
+          docker compose -f docker-compose.test.yml ps
+          echo "=== Acme-store Logs ==="
+          docker compose -f docker-compose.test.yml logs acme-store
+          echo "=== Vault Logs ==="
+          docker compose -f docker-compose.test.yml logs vault
+          echo "=== Pebble Logs ==="
+          docker compose -f docker-compose.test.yml logs pebble
+      
+      - name: Cleanup
+        if: always()
+        run: make test-cleanup
+

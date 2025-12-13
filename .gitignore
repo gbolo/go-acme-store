@@ -1,8 +1,50 @@
-.env
-.idea
-pkg/test
-testdata/config/lab*
-bin/
+# Binaries
 acme-store
 acme-store-fetcher
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Test data
+testdata/temp/
 certs/
+testdata/certs/
+testdata/lab*
+testdata/config/lab*
+
+
+# Distribution / packaging
+dist/
+*.tar.gz
+*.zip
+
+# GoReleaser
+.goreleaser.yaml.lock

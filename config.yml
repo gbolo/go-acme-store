@@ -12,10 +12,29 @@ acme:
   account_email: gbolo@linuxctl.com
   # DNS server to use for validating dns challenge
   dns_server: 8.8.8.8:53
-  # currently ONLY digitalocean is supported...
+  
+  # DNS provider: "digitalocean", "acmedns", or "powerdns"
   dns_provider: digitalocean
-  ## you should set this via env var instead
+  
+  # Skip TLS verification for ACME directory server (for testing with Pebble)
+  # Set to true for development/testing only - NEVER use in production
+  tls_insecure_skip_verify: false
+  
+  # DigitalOcean DNS provider settings
+  ## you should set this via env var instead: export DIGITALOCEAN_TOKEN="dop_xxx"
   #digitalocean_token: dop_xxx
+  
+  # ACME-DNS provider settings
+  # Uncomment to use acme-dns for DNS-01 challenges
+  #acmedns_server_url: "http://localhost:8053"
+  #acmedns_storage: "./acme-dns-accounts.json"
+  
+  # PowerDNS provider settings
+  # Uncomment to use PowerDNS for DNS-01 challenges
+  ## you should set these via env vars: export POWERDNS_API_TOKEN="your-token"
+  #powerdns_server_url: "https://pdns.example.com"
+  #powerdns_api_token: "your-api-token"
+  #powerdns_server_id: "localhost"  # Default server ID
 
 vault:
   address: "http://127.0.0.1:8200"

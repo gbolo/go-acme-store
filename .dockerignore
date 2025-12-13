@@ -1,0 +1,70 @@
+# Binaries
+acme-store
+acme-store-fetcher
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation (not needed in container)
+*.md
+docs/
+examples/
+
+# Test files
+*_test.go
+testdata/
+tests/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Build artifacts
+dist/
+build/
+
+# Temporary files
+tmp/
+*.tmp
+*.log
+
+# Local config and secrets
+config.local.yml
+*.key
+*.pem
+*.crt
+certs/
+

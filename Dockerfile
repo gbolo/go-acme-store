@@ -1,0 +1,67 @@
+# Build stage
+FROM golang:1.25.3-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache git ca-certificates tzdata
+
+WORKDIR /build
+
+# Copy go mod files first for better caching
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the binary with optimizations
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -a -installsuffix cgo \
+    -o acme-store ./cmd/acme-store
+
+# Runtime stage
+FROM alpine:3.21
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    ca-certificates \
+    tzdata \
+    curl
+
+# Create non-root user
+RUN addgroup -g 1000 acme && \
+    adduser -D -u 1000 -G acme acme
+
+# Create necessary directories
+RUN mkdir -p /app /app/web /etc/acme-store && \
+    chown -R acme:acme /app /etc/acme-store
+
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=builder /build/acme-store .
+
+# Copy web UI files
+COPY --from=builder /build/web ./web
+
+# Copy default config (optional)
+COPY --from=builder /build/config.yml /etc/acme-store/config.yml.example
+
+# Switch to non-root user
+USER acme
+
+# Expose the default port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/api/healthz || exit 1
+
+# Set default environment variables
+ENV CONFIG_FILE=/etc/acme-store/config.yml \
+    LOG_LEVEL=INFO \
+    SERVER_BIND_ADDRESS=0.0.0.0 \
+    SERVER_BIND_PORT=8080
+
+# Run the binary
+ENTRYPOINT ["/app/acme-store"]
+CMD ["-config", "/etc/acme-store/config.yml"]

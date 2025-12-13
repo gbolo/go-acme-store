@@ -5,14 +5,17 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/tls"
 	"fmt"
 	"go-acme-store/pkg/crypto"
 	"go-acme-store/pkg/keystore"
 	"go-acme-store/pkg/log"
+	"log/slog"
+	"net/http"
 	"strings"
 
-	"github.com/mholt/acmez"
-	"github.com/mholt/acmez/acme"
+	"github.com/mholt/acmez/v3"
+	"github.com/mholt/acmez/v3/acme"
 	"github.com/spf13/viper"
 )
 
@@ -69,15 +72,39 @@ func RenewCertIfNeeded(ks keystore.Keystore, cn string, sans []string) (err erro
 	// TODO: context should probably have a timeout
 	ctx := context.Background()
 
+	// Get the appropriate DNS solver
+	var dnsSolver acmez.Solver
+	dnsProvider := viper.GetString("acme.dns_provider")
+	switch dnsProvider {
+	case "digitalocean":
+		dnsSolver = getDigitaloceanDnsSolver()
+	case "acmedns":
+		dnsSolver = getACMEDNSSolver()
+	case "powerdns":
+		dnsSolver = getPowerDNSSolver()
+	default:
+		dnsSolver = getDigitaloceanDnsSolver()
+	}
+
+	// Create HTTP client with optional TLS skip verify
+	httpClient := &http.Client{}
+	if viper.GetBool("acme.tls_insecure_skip_verify") {
+		log.Warn("ACME TLS verification is disabled - this should only be used for testing!")
+		httpClient.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		}
+	}
+
 	client := acmez.Client{
 		Client: &acme.Client{
-			Directory: viper.GetString("acme.directory"),
-			Logger:    log.Base,
+			Directory:  viper.GetString("acme.directory"),
+			Logger:     slog.Default(),
+			HTTPClient: httpClient,
 		},
 		ChallengeSolvers: map[string]acmez.Solver{
-			// TODO: in the future we will probably have other solvers
-			//       so this needs to be adjustable
-			acme.ChallengeTypeDNS01: getDigitaloceanDnsSolver(),
+			acme.ChallengeTypeDNS01: dnsSolver,
 		},
 	}
 
@@ -93,15 +120,30 @@ func RenewCertIfNeeded(ks keystore.Keystore, cn string, sans []string) (err erro
 		return fmt.Errorf("generating certificate key: %v", err)
 	}
 
-	// Build list of domains: CN + SANs
-	domains := []string{cn}
+	// Build list of SANs (acmez v3 requires Subject Alt Names, not identifiers)
+	var allSANs []string
+	allSANs = append(allSANs, cn)
+
 	if sans != nil && len(sans) > 0 {
-		domains = append(domains, sans...)
+		allSANs = append(allSANs, sans...)
 		log.Infof("requesting certificate for %s with SANs: %v", cn, sans)
 	}
 
-	certs, err := client.ObtainCertificate(ctx, *account, certPrivateKey, domains)
+	certs, err := client.ObtainCertificateForSANs(ctx, *account, certPrivateKey, allSANs)
 	if err != nil || len(certs) == 0 {
+		// Update certificate status to failed
+		errMsg := fmt.Sprintf("%v", err)
+
+		// Get existing certificate to update status
+		existingCert, getErr := ks.GetCertAndKey(cn)
+		if getErr == nil && existingCert.CommonName != "" {
+			existingCert.Status = "failed"
+			existingCert.Error = errMsg
+			if updateErr := ks.StoreCertAndKey(cn, existingCert); updateErr != nil {
+				log.Errorf("failed to update certificate status: %v", updateErr)
+			}
+		}
+
 		return fmt.Errorf("obtaining certificate: %v", err)
 	}
 

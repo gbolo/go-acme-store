@@ -1,11 +1,11 @@
 # ACME Certificate Store
 
-A Go application that automates ACME certificate management and stores certificates in HashiCorp Vault with a beautiful web UI for monitoring.
+A Go application that automates ACME certificate management with a beautiful web UI for monitoring.
 
 ## Features
 
 - 🔐 **Automated ACME Certificate Management**: Automatically obtains and renews SSL/TLS certificates using the ACME protocol
-- 🏦 **HashiCorp Vault Integration**: Securely stores certificates and private keys in Vault's KV v2 secrets engine
+- 🏦 **Secure Storage**: Securely stores certificates and private keys in Vault's KV v2 secrets engine
 - 🌐 **Modern Web UI**: Beautiful, responsive web interface to monitor and manage certificates
 - ⚙️ **Domain Management**: Add/remove domains via Web UI or REST API without restarting
 - 🔄 **Automatic Renewal**: Monitors certificate expiration and automatically renews certificates
@@ -107,7 +107,7 @@ This project includes two applications:
 
 ### 1. acme-store (Main Daemon)
 - Obtains and renews ACME certificates automatically
-- Stores certificates in HashiCorp Vault
+- Stores certificates securely in Vault
 - Provides Web UI for management
 - Exposes REST API for automation
 

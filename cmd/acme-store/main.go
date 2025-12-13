@@ -2,8 +2,10 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"go-acme-store/pkg/config"
 	"go-acme-store/pkg/log"
+	"go-acme-store/pkg/meta"
 	"os"
 
 	"github.com/fsnotify/fsnotify"
@@ -15,7 +17,14 @@ func main() {
 
 	// Parse command-line flags
 	configFile := flag.String("config", "", "path to configuration file (default: ./config.yml or CONFIG_FILE env var)")
+	showVersion := flag.Bool("version", false, "display version information")
 	flag.Parse()
+
+	// Handle version flag first (before config loading)
+	if *showVersion {
+		fmt.Println(meta.GetAppMetadata().ToString())
+		return
+	}
 
 	// Determine config file path with precedence: flag > env var > default
 	cfg := *configFile

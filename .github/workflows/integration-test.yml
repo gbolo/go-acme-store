@@ -1,10 +1,8 @@
 name: Integration Tests
 
 on:
-  push:
-    branches: [ main, develop ]
+
   pull_request:
-    branches: [ main, develop ]
 
 jobs:
   integration-test:
@@ -12,25 +10,19 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-      
-      - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/checkout@v4
         with:
-          go-version: '1.20'
+          fetch-depth: 0
       
-      - name: Install dependencies
-        run: go mod download
-      
-      - name: Build binaries
-        run: make build
+      - name: Setup mise
+        uses: jdx/mise-action@v3
+        with:
+          install: true
+          experimental: true
       
       - name: Start test environment
         run: make test-setup
-      
-      - name: Wait for services
-        run: sleep 10
-      
+            
       - name: Run integration tests
         run: make test-integration
         env:

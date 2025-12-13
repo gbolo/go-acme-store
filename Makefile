@@ -5,7 +5,24 @@ BINARY_DAEMON=acme-store
 BINARY_FETCHER=acme-store-fetcher
 CMD_DAEMON=./cmd/acme-store
 CMD_FETCHER=./cmd/acme-store-fetcher
-INSTALL_PATH=/usr/local/bin
+
+# Version information
+VERSION    ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "devel")
+COMMIT_SHA ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE ?= $(shell date +%FT%T%z)
+
+# ldflags for version injection
+LDFLAGS = -s -w \
+	-X go-acme-store/pkg/meta.Name=$(BINARY_DAEMON) \
+	-X go-acme-store/pkg/meta.Version=$(VERSION) \
+	-X go-acme-store/pkg/meta.CommitSHA=$(COMMIT_SHA) \
+	-X go-acme-store/pkg/meta.BuildDate=$(BUILD_DATE)
+
+LDFLAGS_FETCHER = -s -w \
+	-X go-acme-store/pkg/meta.Name=$(BINARY_FETCHER) \
+	-X go-acme-store/pkg/meta.Version=$(VERSION) \
+	-X go-acme-store/pkg/meta.CommitSHA=$(COMMIT_SHA) \
+	-X go-acme-store/pkg/meta.BuildDate=$(BUILD_DATE)
 
 # Build all binaries
 all: build
@@ -16,17 +33,20 @@ build: build-daemon build-fetcher
 # Build daemon
 build-daemon:
 	@echo "Building $(BINARY_DAEMON)..."
-	go build -o $(BINARY_DAEMON) $(CMD_DAEMON)
+	@echo "Version: $(VERSION), Commit: $(COMMIT_SHA)"
+	go build -ldflags="$(LDFLAGS)" -o $(BINARY_DAEMON) $(CMD_DAEMON)
 
 # Build fetcher
 build-fetcher:
 	@echo "Building $(BINARY_FETCHER)..."
-	go build -o $(BINARY_FETCHER) $(CMD_FETCHER)
+	@echo "Version: $(VERSION), Commit: $(COMMIT_SHA)"
+	go build -ldflags="$(LDFLAGS_FETCHER)" -o $(BINARY_FETCHER) $(CMD_FETCHER)
 
 # Clean build artifacts
 clean:
 	@echo "Cleaning..."
 	rm -f $(BINARY_DAEMON) $(BINARY_FETCHER)
+	rm -rf dist/
 
 # Install binaries to system
 install: build
@@ -140,3 +160,32 @@ help:
 	@echo "  run-fetcher      - Build and run fetcher"
 	@echo "  help             - Show this help message"
 
+
+# Show version information
+version:
+	@echo "Version:    $(VERSION)"
+	@echo "Commit:     $(COMMIT_SHA)"
+	@echo "Build Date: $(BUILD_DATE)"
+
+# GoReleaser targets
+.PHONY: release release-snapshot release-check release-build
+
+# Create a release (requires git tag)
+release:
+	@echo "Creating release with goreleaser..."
+	goreleaser release --clean
+
+# Create a snapshot release (no git tag required)
+release-snapshot:
+	@echo "Creating snapshot release with goreleaser..."
+	goreleaser release --snapshot --clean
+
+# Check goreleaser configuration
+release-check:
+	@echo "Checking goreleaser configuration..."
+	goreleaser check
+
+# Build with goreleaser locally
+release-build:
+	@echo "Building with goreleaser (local only)..."
+	goreleaser build --snapshot --clean --single-target

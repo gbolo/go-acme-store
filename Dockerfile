@@ -1,25 +1,4 @@
-# Build stage
-FROM golang:1.25.3-alpine AS builder
-
-# Install build dependencies
-RUN apk add --no-cache git ca-certificates tzdata
-
-WORKDIR /build
-
-# Copy go mod files first for better caching
-COPY go.mod go.sum ./
-RUN go mod download
-
-# Copy source code
-COPY . .
-
-# Build the binary with optimizations
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -a -installsuffix cgo \
-    -ldflags="-w -s -X 'go-acme-store/pkg/meta.AppVersion=${VERSION:-devel}' -X 'go-acme-store/pkg/meta.CommitRef=${COMMIT_REF:-unknown}'" \
-    -o acme-store ./cmd/acme-store
-
-# Runtime stage
+# Runtime stage - GoReleaser will provide the pre-built binaries
 FROM alpine:3.21
 
 # Install runtime dependencies
@@ -38,14 +17,18 @@ RUN mkdir -p /app /app/web /etc/acme-store && \
 
 WORKDIR /app
 
-# Copy binary from builder
-COPY --from=builder /build/acme-store .
+# Build arg for target platform (provided by buildx)
+ARG TARGETPLATFORM
 
-# Copy web UI files
-COPY --from=builder /build/web ./web
+# Copy pre-built binary from goreleaser context
+# GoReleaser organizes binaries by platform: linux/amd64/acme-store, linux/arm64/acme-store, etc.
+COPY ${TARGETPLATFORM}/acme-store .
+
+# Copy web UI files from goreleaser context
+COPY web ./web
 
 # Copy default config (optional)
-COPY --from=builder /build/config.yml /etc/acme-store/config.yml.example
+COPY config.yml /etc/acme-store/config.yml.example
 
 # Switch to non-root user
 USER acme

@@ -1,0 +1,175 @@
+# GoReleaser configuration for acme-store
+# https://goreleaser.com
+
+version: 2
+
+# Disable before hook (we'll use mise for tool management)
+before:
+  hooks:
+    - go mod tidy
+
+# Build configuration
+builds:
+  # Main daemon
+  - id: acme-store
+    binary: acme-store
+    main: ./cmd/acme-store
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - "6"
+    ldflags:
+      - -s -w
+      - -X go-acme-store/pkg/meta.Name=acme-store
+      - -X go-acme-store/pkg/meta.Version={{.Version}}
+      - -X go-acme-store/pkg/meta.CommitSHA={{.ShortCommit}}
+      - -X go-acme-store/pkg/meta.BuildDate={{.Date}}
+
+  # Fetcher utility
+  - id: acme-store-fetcher
+    binary: acme-store-fetcher
+    main: ./cmd/acme-store-fetcher
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - "6"
+    ldflags:
+      - -s -w
+      - -X go-acme-store/pkg/meta.Name=acme-store-fetcher
+      - -X go-acme-store/pkg/meta.Version={{.Version}}
+      - -X go-acme-store/pkg/meta.CommitSHA={{.ShortCommit}}
+      - -X go-acme-store/pkg/meta.BuildDate={{.Date}}
+
+# Only build binaries, no archives
+archives:
+  - formats: [binary]
+
+# Checksum configuration
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+# Snapshot configuration (for testing releases)
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+# Changelog configuration
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^ci:'
+      - 'README'
+      - 'Merge pull request'
+      - 'Merge remote-tracking branch'
+  groups:
+    - title: '🚀 Features'
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: '🐛 Bug Fixes'
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: '📝 Documentation'
+      regexp: '^.*?docs(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: '⚡ Performance Improvements'
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 3
+    - title: Other
+      order: 999
+
+# GitHub Release configuration
+release:
+  github:
+    owner: gbolo
+    name: go-acme-store
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## ACME Certificate Store {{ .Tag }}
+    
+    ### Installation
+    
+    Download the appropriate binary for your platform from the assets below.
+    
+    ### Docker Images
+    
+    Docker images are available at:
+    - `docker.io/gbolo/acme-store:{{ .Tag }}`
+    - `docker.io/gbolo/acme-store:latest`
+    
+  footer: |
+    ## Verification
+    
+    All artifacts are checksummed. Verify with:
+    ```bash
+    sha256sum -c checksums.txt
+    ```
+    
+    **Full Changelog**: https://github.com/gbolo/go-acme-store/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+# Metadata
+metadata:
+  mod_timestamp: '{{ .CommitTimestamp }}'
+
+# Docker images using dockers_v2 (multi-arch with buildx)
+dockers_v2:
+  - # ID of the image
+    id: acme-store
+    
+    # Path to Dockerfile
+    dockerfile: Dockerfile
+    
+    # IDs to filter the binaries - only include acme-store daemon
+    ids:
+      - acme-store
+    
+    # Image names
+    images:
+      - "docker.io/gbolo/acme-store"
+    
+    # Tags
+    tags:
+      - "{{ .Tag }}"
+      - "{{ if not .Prerelease }}latest{{ end }}"
+      - "{{ .Major }}.{{ .Minor }}"
+    
+    # Extra files to include in build context
+    extra_files:
+      - web/
+      - config.yml
+    
+    # OCI labels
+    labels:
+      "org.opencontainers.image.title": "{{ .ProjectName }}"
+      "org.opencontainers.image.description": "ACME Certificate Store - Automated certificate management"
+      "org.opencontainers.image.created": "{{ .Date }}"
+      "org.opencontainers.image.revision": "{{ .FullCommit }}"
+      "org.opencontainers.image.version": "{{ .Version }}"
+      "org.opencontainers.image.source": "{{ .GitURL }}"
+      "org.opencontainers.image.licenses": "MIT"
+    
+    # Platforms to build for
+    platforms:
+      - linux/amd64
+      - linux/arm64
+

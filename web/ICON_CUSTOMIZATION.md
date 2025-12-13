@@ -184,7 +184,7 @@ If using Flaticon icons with a free license, you may need to add attribution. Ad
 
 ```html
 <footer>
-    <p>ACME Certificate Store - Powered by HashiCorp Vault</p>
+    <p>ACME Certificate Store</p>
     <p class="icon-attribution">
         Icons made by <a href="https://www.flaticon.com/authors/[author]" title="[author]">
         [author]</a> from <a href="https://www.flaticon.com/" title="Flaticon">www.flaticon.com</a>

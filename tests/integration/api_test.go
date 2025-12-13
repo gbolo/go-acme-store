@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"testing"
@@ -380,6 +381,76 @@ func TestRemoveDomainSoft(t *testing.T) {
 
 	// Final cleanup
 	removeDomain(t, domain, true)
+}
+
+func TestDeleteUnmanagedCert(t *testing.T) {
+	domain := "delete-unmanaged-test." + testZone
+
+	// Add domain first
+	addDomain(t, domain, nil)
+	time.Sleep(500 * time.Millisecond)
+
+	// Try to delete managed certificate (should fail)
+	req, err := http.NewRequest("DELETE", baseURL+"/api/certs/"+domain, nil)
+	require.NoError(t, err)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, 400, resp.StatusCode, "should not be able to delete managed certificate")
+
+	// Soft delete (unmanage) the domain
+	removeDomain(t, domain, false)
+	time.Sleep(500 * time.Millisecond)
+
+	// Verify certificate is unmanaged
+	resp2, err := http.Get(baseURL + "/api/certs")
+	require.NoError(t, err)
+	defer resp2.Body.Close()
+
+	var certs []map[string]interface{}
+	err = json.NewDecoder(resp2.Body).Decode(&certs)
+	require.NoError(t, err)
+
+	found := false
+	for _, cert := range certs {
+		if cn, ok := cert["common_name"].(string); ok && cn == domain {
+			found = true
+			managed, _ := cert["managed"].(bool)
+			assert.False(t, managed, "certificate should be unmanaged")
+			break
+		}
+	}
+	assert.True(t, found, "certificate should exist after soft delete")
+
+	// Now delete the unmanaged certificate (should succeed)
+	req2, err := http.NewRequest("DELETE", baseURL+"/api/certs/"+domain, nil)
+	require.NoError(t, err)
+
+	resp3, err := http.DefaultClient.Do(req2)
+	require.NoError(t, err)
+	defer resp3.Body.Close()
+
+	if resp3.StatusCode != 200 {
+		body, _ := io.ReadAll(resp3.Body)
+		t.Fatalf("expected status 200 when deleting unmanaged cert, got %d: %s", resp3.StatusCode, string(body))
+	}
+
+	// Verify certificate is completely deleted
+	resp4, err := http.Get(baseURL + "/api/certs")
+	require.NoError(t, err)
+	defer resp4.Body.Close()
+
+	var certsAfter []map[string]interface{}
+	err = json.NewDecoder(resp4.Body).Decode(&certsAfter)
+	require.NoError(t, err)
+
+	for _, cert := range certsAfter {
+		if cn, ok := cert["common_name"].(string); ok && cn == domain {
+			t.Fatalf("certificate for %s still exists after deletion", domain)
+		}
+	}
 }
 
 func TestInvalidDomainRejection(t *testing.T) {

@@ -22,6 +22,7 @@ func httpServerDaemon(appName string) {
 	api.Get("/healthz", handlerHealthCheck)
 	api.Get("/config", handlerConfig)
 	api.Get("/certs", handlerCerts)
+	api.Delete("/certs/:domain", handlerDeleteCert)
 
 	// Domain management API
 	api.Get("/domains", handlerGetDomains)
@@ -285,5 +286,45 @@ func handlerTriggerRenewal(c *fiber.Ctx) (err error) {
 
 	return c.Status(202).JSON(&fiber.Map{
 		"message": "certificate renewal triggered, check logs for progress",
+	})
+}
+
+func handlerDeleteCert(c *fiber.Ctx) (err error) {
+	domain := c.Params("domain")
+
+	if domain == "" {
+		return c.Status(400).JSON(&fiber.Map{
+			"error": "domain parameter is required",
+		})
+	}
+
+	// Check if certificate exists
+	certAndKey, err := ks.GetCertAndKey(domain)
+	if err != nil {
+		return c.Status(404).JSON(&fiber.Map{
+			"error": fmt.Sprintf("certificate not found for domain %s", domain),
+		})
+	}
+
+	// Check if certificate is managed
+	if certAndKey.Managed {
+		return c.Status(400).JSON(&fiber.Map{
+			"error": fmt.Sprintf("cannot delete managed certificate for domain %s, unmanage it first by calling DELETE /api/domains/%s", domain, domain),
+		})
+	}
+
+	// Delete the certificate
+	err = ks.DeleteCertAndKey(domain)
+	if err != nil {
+		log.Warnf("failed to delete cert for domain %s: %v", domain, err)
+		return c.Status(500).JSON(&fiber.Map{
+			"error": fmt.Sprintf("failed to delete certificate: %v", err),
+		})
+	}
+
+	log.Infof("certificate deleted for domain %s via API", domain)
+	return c.Status(200).JSON(&fiber.Map{
+		"message": fmt.Sprintf("certificate for domain %s deleted successfully", domain),
+		"domain":  domain,
 	})
 }

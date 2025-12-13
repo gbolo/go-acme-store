@@ -297,6 +297,12 @@ function createCertificateCard(cert, index) {
                     <i class="fi fi-rr-link-alt"></i>
                     <span>View Full Chain</span>
                 </button>
+                ${!cert.managed ? `
+                    <button class="btn btn-danger" onclick="deleteUnmanagedCert('${escapeForJs(cert.common_name)}')">
+                        <i class="fi fi-rr-trash"></i>
+                        <span>Delete Certificate</span>
+                    </button>
+                ` : ''}
             </div>
         ` : ''}
     `;
@@ -709,6 +715,43 @@ function setupAutoRefresh() {
         if (indicator) {
             indicator.style.display = 'none';
         }
+    }
+}
+
+// Delete unmanaged certificate
+async function deleteUnmanagedCert(domain) {
+    const confirmMessage = `⚠️ DELETE CERTIFICATE ⚠️\n\n` +
+                          `Are you sure you want to DELETE the certificate for ${domain}?\n\n` +
+                          `This will:\n` +
+                          `• PERMANENTLY delete the certificate from Vault\n` +
+                          `• Remove all certificate data\n` +
+                          `• This action CANNOT be undone!\n\n` +
+                          `Note: This domain is already unmanaged, so it won't be renewed anyway.`;
+    
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/certs/${encodeURIComponent(domain)}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to delete certificate');
+        }
+        
+        // Show success message
+        alert(`✅ Certificate for ${domain} deleted successfully!`);
+        
+        // Reload certificates
+        await loadCertificates();
+        
+    } catch (error) {
+        console.error('Error deleting certificate:', error);
+        alert(`❌ Failed to delete certificate: ${error.message}`);
     }
 }
 

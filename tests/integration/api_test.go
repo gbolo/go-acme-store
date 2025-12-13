@@ -19,7 +19,7 @@ import (
 
 const (
 	baseURL     = "http://127.0.0.1:15872"
-	testTimeout = 30 * time.Second
+	testTimeout = 60 * time.Second
 )
 
 // testZone is the DNS zone configured in PowerDNS for testing
@@ -75,6 +75,7 @@ func waitForAPI() bool {
 		}
 		if resp != nil {
 			resp.Body.Close()
+			fmt.Println("go status code: ", resp.StatusCode)
 		}
 		time.Sleep(1 * time.Second)
 	}

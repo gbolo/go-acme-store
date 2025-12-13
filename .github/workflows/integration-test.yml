@@ -32,11 +32,11 @@ jobs:
         if: failure()
         run: |
           echo "=== Docker Compose Services ==="
-          docker-compose -f docker-compose.test.yml ps
+          docker compose -f docker-compose.test.yml ps
           echo "=== Vault Logs ==="
-          docker-compose -f docker-compose.test.yml logs vault
+          docker compose -f docker-compose.test.yml logs vault
           echo "=== Pebble Logs ==="
-          docker-compose -f docker-compose.test.yml logs pebble
+          docker compose -f docker-compose.test.yml logs pebble
       
       - name: Cleanup
         if: always()

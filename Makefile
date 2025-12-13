@@ -79,7 +79,7 @@ test-setup:
 	@curl -s http://localhost:8200/v1/sys/health > /dev/null && echo "✓ Vault is ready" || echo "✗ Vault not ready"
 	@curl -sk https://localhost:14000/dir > /dev/null 2>&1 && echo "✓ Pebble is ready" || echo "✗ Pebble not ready"
 	@curl -s http://localhost:8053/health > /dev/null 2>&1 && echo "✓ acme-dns is ready" || echo "✗ acme-dns not ready"
-	@curl -s http://localhost:15872/api/healthz > /dev/null 2>&1 && echo "✓ acme-store is ready" || echo "✗ acme-store not ready"
+	@curl -s http://localhost:15872/api/healthz > /dev/null 2>&1 && echo "✓ acme-store is ready" || echo "✗ acme-store not ready" && docker logs acme-store-test; exit 1
 	@echo "Test environment is ready!"
 
 test-cleanup:

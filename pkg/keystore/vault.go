@@ -45,7 +45,7 @@ func (v *VaultKeystore) storeAccount(account AcmeAccount) (err error) {
 		return
 	}
 	result, err := v.client.Logical().Write(v.getAccountPath(), vaultData)
-	if err != nil {
+	if err == nil && result != nil {
 		log.Infof("stored account info for %s -> %s version %v", account.Email, v.getAccountPath(), result.Data["version"])
 	}
 	return

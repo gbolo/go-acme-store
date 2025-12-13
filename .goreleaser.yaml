@@ -137,7 +137,7 @@ dockers_v2:
     id: acme-store
     
     # Path to Dockerfile
-    dockerfile: Dockerfile
+    dockerfile: Dockerfile.goreleaser
     
     # IDs to filter the binaries - only include acme-store daemon
     ids:

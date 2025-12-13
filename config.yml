@@ -7,11 +7,14 @@ server:
 
 acme:
   # ACME directory server to use
-  directory: "https://acme-staging-v02.api.letsencrypt.org/directory"
+  directory: "https://acme-staging-v02.api.letsencrypt.org/directory" # staging
+  # directory: "https://acme-v02.api.letsencrypt.org/directory" # prod
+
   # ACME account to use (private key will get created if it does not exist)
-  account_email: gbolo@linuxctl.com
-  # DNS server to use for validating dns challenge
-  dns_server: 8.8.8.8:53
+  account_email: acme-store@devnull
+
+  # (optional) DNS server to use for validating dns challenge (overrides the system dns)
+  # dns_server: 8.8.8.8:53
   
   # DNS provider: "digitalocean", "acmedns", or "powerdns"
   dns_provider: digitalocean
@@ -21,8 +24,8 @@ acme:
   tls_insecure_skip_verify: false
   
   # DigitalOcean DNS provider settings
-  ## you should set this via env var instead: export DIGITALOCEAN_TOKEN="dop_xxx"
-  #digitalocean_token: dop_xxx
+  ## you should set this via env var instead: export ACMESTORE_ACME_DIGITALOCEAN_TOKEN="dop_xxx"
+  # digitalocean_token: dop_xxx
   
   # ACME-DNS provider settings
   # Uncomment to use acme-dns for DNS-01 challenges
@@ -44,8 +47,8 @@ vault:
   kv2_secret_path: platform/acme
   # skip TLS certificate verification (useful for self-signed certs in dev/test)
   tls_skip_verify: false
-  ## you should set this via env var instead
-  #token: xxx
+  ## you should set this via env var instead: VAULT_TOKEN
+  # token: xxx
 
 # Fetcher configuration (for acme-store-fetcher)
 # These can be overridden with command-line flags
@@ -55,7 +58,3 @@ fetcher:
   # Path to write Traefik configuration file (optional)
   # traefik_config: "/etc/traefik/dynamic/acme-certs.yml"
 
-# NOTE: Domains are now managed via Vault using the API endpoints:
-# - GET    /api/domains           - List managed domains
-# - POST   /api/domains           - Add a domain
-# - DELETE /api/domains/{domain}  - Remove a domain

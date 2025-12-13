@@ -3,13 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/spf13/viper"
 	"go-acme-store/pkg/config"
 	"go-acme-store/pkg/log"
 	"go-acme-store/pkg/meta"
 	"os"
-
-	"github.com/fsnotify/fsnotify"
-	"github.com/spf13/viper"
 )
 
 func main() {
@@ -31,22 +29,34 @@ func main() {
 	if cfg == "" {
 		cfg = os.Getenv("CONFIG_FILE")
 	}
-	if cfg == "" {
-		cfg = "./config.yml"
+
+	// set config defaults then load config
+	viper.SetDefault("server.bind_address", "0.0.0.0")
+	viper.SetDefault("server.bind_port", "8080")
+	viper.SetDefault("acme.directory", "https://acme-staging-v02.api.letsencrypt.org/directory")
+	viper.SetDefault("acme.account_email", "acme-store@devnull")
+	viper.SetDefault("vault.tls_skip_verify", false)
+	config.MustInitViperAndLogger(appName, cfg)
+
+	// ensure we have the required config values
+	// checks that the config is correctly defined
+	// these values cannot be empty
+	keysThatCannotBeEmpty := []string{
+		"acme.dns_provider",
+		"vault.address",
+		"vault.kv2_mount",
+		"vault.kv2_secret_path",
 	}
 
-	config.MustInitViperAndLogger(appName, cfg)
+	for _, key := range keysThatCannotBeEmpty {
+		if viper.GetString(key) == "" {
+			log.Fatalf("%s cannot be empty", key)
+		}
+	}
 
 	// initialize shared resources
 	initKeystore()
 	loadDomainsFromVault()
-
-	// watch for config changes to re-initialize keystore
-	viper.WatchConfig()
-	viper.OnConfigChange(func(e fsnotify.Event) {
-		log.Warnf("config change detected")
-		initKeystore()
-	})
 
 	// start vault retry loop in background
 	go keystoreRetryLoop()

@@ -77,13 +77,17 @@ func RenewCertIfNeeded(ks keystore.Keystore, cn string, sans []string) (err erro
 	dnsProvider := viper.GetString("acme.dns_provider")
 	switch dnsProvider {
 	case "digitalocean":
-		dnsSolver = getDigitaloceanDnsSolver()
+		dnsSolver, err = getDigitaloceanDnsSolver()
 	case "acmedns":
-		dnsSolver = getACMEDNSSolver()
+		dnsSolver, err = getACMEDNSSolver()
 	case "powerdns":
-		dnsSolver = getPowerDNSSolver()
+		dnsSolver, err = getPowerDNSSolver()
 	default:
-		dnsSolver = getDigitaloceanDnsSolver()
+		return fmt.Errorf("unknown or unconfigured DNS provider: %s", dnsProvider)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to initialize DNS provider '%s': %w", dnsProvider, err)
 	}
 
 	// Create HTTP client with optional TLS skip verify

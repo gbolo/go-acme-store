@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"go-acme-store/pkg/log"
 	"go-acme-store/pkg/meta"
 	stdlog "log"
@@ -22,10 +21,10 @@ func MustInitViper(appName, cfgFile string) {
 
 	// set default config name and paths to look for it
 	viper.SetConfigType("yaml")
-	viper.SetConfigName(fmt.Sprintf("%s-config", strings.ToLower(appName)))
+	viper.SetConfigName("config")
 	viper.AddConfigPath("./")
 	viper.AddConfigPath("./configs")
-	viper.AddConfigPath("/opt/cloudops/configs")
+	viper.AddConfigPath("/etc/acme-store")
 
 	// if the user provides a config file in a flag, lets use it
 	if cfgFile != "" {

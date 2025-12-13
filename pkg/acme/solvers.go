@@ -1,6 +1,8 @@
 package acme
 
 import (
+	"fmt"
+
 	"github.com/caddyserver/certmagic"
 	"github.com/libdns/acmedns"
 	"github.com/libdns/digitalocean"
@@ -8,8 +10,12 @@ import (
 	"github.com/spf13/viper"
 )
 
-func getDigitaloceanDnsSolver() *certmagic.DNS01Solver {
+func getDigitaloceanDnsSolver() (*certmagic.DNS01Solver, error) {
 	doToken := viper.GetString("acme.digitalocean_token")
+	if doToken == "" {
+		return nil, fmt.Errorf("DigitalOcean DNS provider requires 'acme.digitalocean_token' to be configured")
+	}
+
 	doSolver := &certmagic.DNS01Solver{}
 
 	// Configure DNS resolver if specified
@@ -18,14 +24,14 @@ func getDigitaloceanDnsSolver() *certmagic.DNS01Solver {
 	}
 
 	doSolver.DNSManager.DNSProvider = &digitalocean.Provider{APIToken: doToken}
-	return doSolver
+	return doSolver, nil
 }
 
-func getACMEDNSSolver() *certmagic.DNS01Solver {
+func getACMEDNSSolver() (*certmagic.DNS01Solver, error) {
 	// Get acme-dns configuration
 	serverURL := viper.GetString("acme.acmedns_server_url")
 	if serverURL == "" {
-		serverURL = "http://localhost:8053" // Default
+		return nil, fmt.Errorf("ACME-DNS provider requires 'acme.acmedns_server_url' to be configured")
 	}
 
 	// Load existing accounts from config if provided
@@ -45,10 +51,25 @@ func getACMEDNSSolver() *certmagic.DNS01Solver {
 		ServerURL: serverURL,
 		Configs:   configs,
 	}
-	return acmeDnsSolver
+	return acmeDnsSolver, nil
 }
 
-func getPowerDNSSolver() *certmagic.DNS01Solver {
+func getPowerDNSSolver() (*certmagic.DNS01Solver, error) {
+	serverURL := viper.GetString("acme.powerdns_server_url")
+	apiToken := viper.GetString("acme.powerdns_api_token")
+	serverID := viper.GetString("acme.powerdns_server_id")
+
+	// Validate required configuration
+	if serverURL == "" {
+		return nil, fmt.Errorf("PowerDNS provider requires 'acme.powerdns_server_url' to be configured")
+	}
+	if apiToken == "" {
+		return nil, fmt.Errorf("PowerDNS provider requires 'acme.powerdns_api_token' to be configured")
+	}
+	if serverID == "" {
+		return nil, fmt.Errorf("PowerDNS provider requires 'acme.powerdns_server_id' to be configured")
+	}
+
 	pdnsSolver := &certmagic.DNS01Solver{}
 
 	// Configure DNS resolver if specified - CRITICAL for zone finding!
@@ -57,9 +78,9 @@ func getPowerDNSSolver() *certmagic.DNS01Solver {
 	}
 
 	pdnsSolver.DNSManager.DNSProvider = &powerdns.Provider{
-		ServerURL: viper.GetString("acme.powerdns_server_url"),
-		APIToken:  viper.GetString("acme.powerdns_api_token"),
-		ServerID:  viper.GetString("acme.powerdns_server_id"),
+		ServerURL: serverURL,
+		APIToken:  apiToken,
+		ServerID:  serverID,
 	}
-	return pdnsSolver
+	return pdnsSolver, nil
 }

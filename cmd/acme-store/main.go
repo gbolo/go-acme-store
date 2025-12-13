@@ -48,6 +48,9 @@ func main() {
 		initKeystore()
 	})
 
+	// start vault retry loop in background
+	go keystoreRetryLoop()
+
 	// kick off the daemon on its own go routine
 	go acmeDaemon()
 

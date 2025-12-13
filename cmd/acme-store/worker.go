@@ -12,6 +12,11 @@ var mutex sync.Mutex
 var triggerChan = make(chan bool, 1)
 
 func loadDomainsFromVault() {
+	if err := ensureKeystore(); err != nil {
+		log.Warnf("cannot load domains: %v", err)
+		return
+	}
+	
 	domains, err := ks.GetManagedDomains()
 	if err != nil {
 		log.Warnf("failed to load managed domains from vault: %v", err)
@@ -54,6 +59,11 @@ func triggerAcmeOrders() {
 func doAcmeOrders() {
 	mutex.Lock()
 	defer mutex.Unlock()
+	
+	if err := ensureKeystore(); err != nil {
+		log.Warnf("skipping ACME orders: %v", err)
+		return
+	}
 	
 	domains, err := ks.GetManagedDomains()
 	if err != nil {

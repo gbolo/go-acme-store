@@ -92,7 +92,7 @@ func TestHealthCheck(t *testing.T) {
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
 
-	assert.Equal(t, "success", result["status"])
+	assert.Equal(t, "healthy", result["status"])
 }
 
 func TestVersion(t *testing.T) {

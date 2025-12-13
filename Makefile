@@ -79,8 +79,7 @@ test-setup:
 	@curl -s http://localhost:8200/v1/sys/health > /dev/null && echo "✓ Vault is ready" || echo "✗ Vault not ready"
 	@curl -sk https://localhost:14000/dir > /dev/null 2>&1 && echo "✓ Pebble is ready" || echo "✗ Pebble not ready"
 	@curl -s http://localhost:8053/health > /dev/null 2>&1 && echo "✓ acme-dns is ready" || echo "✗ acme-dns not ready"
-	@curl -s http://localhost:15872/api/healthz > /dev/null 2>&1 && echo "✓ acme-store is ready" || echo "✗ acme-store not ready" && docker logs acme-store-test; exit 1
-	@echo "Test environment is ready!"
+	@curl -s http://localhost:15872/api/healthz > /dev/null 2>&1 && echo "✓ acme-store is ready" || echo "✗ acme-store not ready"; docker logs acme-store-test
 
 test-cleanup:
 	@echo "Stopping test environment..."
@@ -94,7 +93,7 @@ test-integration:
 	@go test -v -count=1 -tags=integration ./tests/integration/...
 	@echo "✓ Integration tests complete!"
 
-test-all: test-setup test-integration test-cleanup
+test-all: test-cleanup test-setup test-integration test-cleanup
 
 # Docker targets
 .PHONY: docker-build docker-run docker-push docker-clean

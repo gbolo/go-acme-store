@@ -56,7 +56,45 @@ func handlerVersion(c *fiber.Ctx) (err error) {
 }
 
 func handlerHealthCheck(c *fiber.Ctx) (err error) {
-	return c.Status(200).JSON(&fiber.Map{"status": "success"})
+	health := &fiber.Map{
+		"status": "healthy",
+		"vault": &fiber.Map{
+			"connected": false,
+			"status":    "unavailable",
+		},
+	}
+
+	// Check vault connectivity
+	if err := ensureKeystore(); err == nil {
+		// Vault is connected, try a simple operation to verify it's working
+		_, err := ks.GetManagedDomains()
+		if err == nil {
+			(*health)["vault"] = &fiber.Map{
+				"connected": true,
+				"status":    "healthy",
+			}
+		} else {
+			(*health)["vault"] = &fiber.Map{
+				"connected": true,
+				"status":    "error",
+				"error":     err.Error(),
+			}
+			(*health)["status"] = "degraded"
+		}
+	} else {
+		(*health)["vault"] = &fiber.Map{
+			"connected": false,
+			"status":    "unavailable",
+		}
+		(*health)["status"] = "degraded"
+	}
+
+	statusCode := 200
+	if (*health)["status"] == "degraded" {
+		statusCode = 503
+	}
+
+	return c.Status(statusCode).JSON(health)
 }
 
 func handlerConfig(c *fiber.Ctx) (err error) {
@@ -93,6 +131,11 @@ func handlerWebUI(c *fiber.Ctx) (err error) {
 }
 
 func handlerCerts(c *fiber.Ctx) (err error) {
+	if err := ensureKeystore(); err != nil {
+		return c.Status(503).JSON(&fiber.Map{
+			"error": err.Error(),
+		})
+	}
 
 	domains, err := ks.GetAllDomains()
 	if err != nil {
@@ -163,6 +206,12 @@ type certInfo struct {
 // Domain management handlers
 
 func handlerGetDomains(c *fiber.Ctx) (err error) {
+	if err := ensureKeystore(); err != nil {
+		return c.Status(503).JSON(&fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
 	domains, err := ks.GetManagedDomains()
 	if err != nil {
 		return c.Status(500).JSON(&fiber.Map{
@@ -177,6 +226,12 @@ func handlerGetDomains(c *fiber.Ctx) (err error) {
 }
 
 func handlerAddDomain(c *fiber.Ctx) (err error) {
+	if err := ensureKeystore(); err != nil {
+		return c.Status(503).JSON(&fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
 	type addDomainRequest struct {
 		Domain string   `json:"domain"`
 		SANs   []string `json:"sans,omitempty"`
@@ -216,6 +271,12 @@ func handlerAddDomain(c *fiber.Ctx) (err error) {
 }
 
 func handlerRemoveDomain(c *fiber.Ctx) (err error) {
+	if err := ensureKeystore(); err != nil {
+		return c.Status(503).JSON(&fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
 	domain := c.Params("domain")
 	deleteCert := c.Query("delete_cert", "false") == "true"
 
@@ -279,6 +340,12 @@ func handlerRemoveDomain(c *fiber.Ctx) (err error) {
 }
 
 func handlerTriggerRenewal(c *fiber.Ctx) (err error) {
+	if err := ensureKeystore(); err != nil {
+		return c.Status(503).JSON(&fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
 	log.Infof("certificate renewal triggered via API")
 
 	// Trigger the ACME daemon to run
@@ -290,6 +357,12 @@ func handlerTriggerRenewal(c *fiber.Ctx) (err error) {
 }
 
 func handlerDeleteCert(c *fiber.Ctx) (err error) {
+	if err := ensureKeystore(); err != nil {
+		return c.Status(503).JSON(&fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
 	domain := c.Params("domain")
 
 	if domain == "" {

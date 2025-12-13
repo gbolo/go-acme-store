@@ -39,7 +39,7 @@ install: build
 
 # Run tests
 test:
-	go test -v ./...
+	go test -v -count=1 ./...
 
 # Run daemon
 run-daemon: build-daemon
@@ -71,19 +71,7 @@ test-cleanup:
 
 test-integration:
 	@echo "Running integration tests..."
-	@echo "Ensuring test environment is running..."
-	@docker compose -f docker-compose.test.yml ps acme-store | grep -q "Up" || (echo "Starting test environment..." && $(MAKE) test-setup)
-	@echo "Waiting for API to be ready..."
-	@for i in 1 2 3 4 5 6 7 8 9 10; do \
-		if curl -sf http://localhost:15872/api/healthz > /dev/null 2>&1; then \
-			echo "✓ API is ready"; \
-			break; \
-		fi; \
-		echo "Waiting for API... ($$i/10)"; \
-		sleep 2; \
-	done
-	@echo "Running tests..."
-	@go test -v -tags=integration ./tests/integration/...
+	@go test -v -count=1 -tags=integration ./tests/integration/...
 	@echo "✓ Integration tests complete!"
 
 test-all: test-setup test-integration test-cleanup

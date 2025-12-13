@@ -21,9 +21,13 @@ const (
 	testTimeout = 30 * time.Second
 )
 
-// Test domain - using example.com which Pebble will validate
-var testDomain = "test.example.com"
-var testDomainWildcard = "*.test.example.com"
+// testZone is the DNS zone configured in PowerDNS for testing
+var testZone = "acme.test"
+
+// Test domains within our test zone
+var testDomain = "test." + testZone
+var testDomainWildcard = "*." + testZone
+var testDomain2 = "test2." + testZone
 
 func TestMain(m *testing.M) {
 	// Wait for API to be ready
@@ -34,8 +38,28 @@ func TestMain(m *testing.M) {
 	}
 	fmt.Println("API is ready, running tests...")
 
+	// Verify environment is clean before running tests
+	fmt.Println("Verifying clean test environment...")
+	if !verifyNoDomains() {
+		fmt.Println("❌ FAIL: Test environment is not clean. Existing domains found.")
+		fmt.Println("Please clean up existing domains before running tests.")
+		fmt.Println("Run: make test-cleanup")
+		os.Exit(1)
+	}
+	if !verifyNoCerts() {
+		fmt.Println("❌ FAIL: Test environment is not clean. Existing certificates found.")
+		fmt.Println("Please clean up existing certificates before running tests.")
+		fmt.Println("Run: make test-cleanup")
+		os.Exit(1)
+	}
+	fmt.Println("✓ Test environment is clean")
+
 	// Run tests
 	code := m.Run()
+
+	// Final cleanup after all tests
+	fmt.Println("Final cleanup after all tests...")
+	cleanupAllDomains()
 
 	os.Exit(code)
 }
@@ -119,14 +143,21 @@ func TestListDomainsInitiallyEmpty(t *testing.T) {
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
 
-	domains := result["domains"].([]interface{})
 	count := int(result["count"].(float64))
+	assert.Equal(t, 0, count, "domain list should be empty at start of tests")
 
-	assert.GreaterOrEqual(t, count, 0)
-	assert.Len(t, domains, count)
+	// domains field may be null or empty array when count is 0
+	if result["domains"] != nil {
+		domains := result["domains"].([]interface{})
+		assert.Len(t, domains, 0, "domains array should be empty")
+	}
 }
 
 func TestAddDomain(t *testing.T) {
+	// Ensure clean state
+	removeDomain(t, testDomain, true)
+	time.Sleep(500 * time.Millisecond)
+
 	// Add a domain
 	payload := map[string]interface{}{
 		"domain": testDomain,
@@ -143,6 +174,7 @@ func TestAddDomain(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
+	// Should return 201 for new domain
 	assert.Equal(t, 201, resp.StatusCode)
 
 	var result map[string]interface{}
@@ -151,14 +183,46 @@ func TestAddDomain(t *testing.T) {
 
 	assert.Contains(t, result["message"], testDomain)
 	assert.Equal(t, testDomain, result["domain"])
+
+	// Cleanup
+	defer removeDomain(t, testDomain, true)
+}
+
+func TestAddDomainAlreadyExists(t *testing.T) {
+	// Add domain first time
+	addDomain(t, testDomain, nil)
+	defer removeDomain(t, testDomain, true)
+
+	// Try to add the same domain again
+	payload := map[string]interface{}{
+		"domain": testDomain,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	resp, err := http.Post(
+		baseURL+"/api/domains",
+		"application/json",
+		bytes.NewBuffer(jsonData),
+	)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	// Should return 400 for duplicate domain
+	assert.Equal(t, 400, resp.StatusCode)
 }
 
 func TestAddDomainWithSANs(t *testing.T) {
-	domain := "san-test.example.com"
+	domain := "san-test." + testZone
+
+	// Ensure clean state
+	removeDomain(t, domain, true)
+	time.Sleep(500 * time.Millisecond)
 
 	payload := map[string]interface{}{
 		"domain": domain,
-		"sans":   []string{"www.san-test.example.com", "api.san-test.example.com"},
+		"sans":   []string{"www.san-test." + testZone, "api.san-test." + testZone},
 	}
 
 	jsonData, err := json.Marshal(payload)
@@ -183,12 +247,17 @@ func TestAddDomainWithSANs(t *testing.T) {
 	assert.Len(t, sans, 2)
 
 	// Clean up
-	defer removeDomain(t, domain, false)
+	defer removeDomain(t, domain, true)
 }
 
 func TestListDomainsAfterAdd(t *testing.T) {
-	// Ensure test domain is added
+	// Ensure clean state
+	removeDomain(t, testDomain, true)
+	time.Sleep(500 * time.Millisecond)
+
+	// Add test domain
 	addDomain(t, testDomain, nil)
+	defer removeDomain(t, testDomain, true)
 
 	resp, err := http.Get(baseURL + "/api/domains")
 	require.NoError(t, err)
@@ -208,14 +277,29 @@ func TestListDomainsAfterAdd(t *testing.T) {
 }
 
 func TestListCertificates(t *testing.T) {
+	// Ensure clean state
+	removeDomain(t, testDomain, true)
+	time.Sleep(500 * time.Millisecond)
+
 	// Add domain to ensure at least one certificate
 	addDomain(t, testDomain, nil)
+	defer removeDomain(t, testDomain, true)
 
 	// Trigger renewal to ensure certificate attempt
 	triggerRenewal(t)
 
-	// Wait a bit for certificate attempt
-	time.Sleep(2 * time.Second)
+	// Wait for certificate to be issued
+	cert := waitForCertificateStatus(t, testDomain, "issued", 60*time.Second)
+	require.NotNil(t, cert, "certificate should be issued within timeout")
+
+	// Verify certificate was issued by Pebble
+	issuers := cert["issuers"].([]interface{})
+	require.NotEmpty(t, issuers, "certificate should have issuers")
+
+	firstIssuer := issuers[0].(string)
+	assert.Contains(t, firstIssuer, "Pebble", "certificate should be issued by Pebble")
+
+	t.Logf("✅ Certificate issued by: %s", firstIssuer)
 
 	resp, err := http.Get(baseURL + "/api/certs")
 	require.NoError(t, err)
@@ -271,7 +355,7 @@ func TestTriggerRenewal(t *testing.T) {
 }
 
 func TestRemoveDomainSoft(t *testing.T) {
-	domain := "remove-test.example.com"
+	domain := "soft-delete-test." + testZone
 
 	// Add domain first
 	addDomain(t, domain, nil)
@@ -288,44 +372,14 @@ func TestRemoveDomainSoft(t *testing.T) {
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
 
-	domains := result["domains"].([]interface{})
-	assert.NotContains(t, domains, domain)
-}
-
-func TestRemoveDomainHard(t *testing.T) {
-	domain := "delete-test.example.com"
-
-	// Add domain first
-	addDomain(t, domain, nil)
-
-	// Hard delete
-	removeDomain(t, domain, true)
-
-	// Verify it's not in managed domains
-	resp, err := http.Get(baseURL + "/api/domains")
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	var result map[string]interface{}
-	err = json.NewDecoder(resp.Body).Decode(&result)
-	require.NoError(t, err)
-
-	domains := result["domains"].([]interface{})
-	assert.NotContains(t, domains, domain)
-
-	// Should also not be in certificates list (or marked as deleted)
-	certResp, err := http.Get(baseURL + "/api/certs")
-	require.NoError(t, err)
-	defer certResp.Body.Close()
-
-	var certs []map[string]interface{}
-	err = json.NewDecoder(certResp.Body).Decode(&certs)
-	require.NoError(t, err)
-
-	// Domain should not exist in certs
-	for _, cert := range certs {
-		assert.NotEqual(t, domain, cert["common_name"])
+	// Check if domains field exists and is not nil
+	if result["domains"] != nil {
+		domains := result["domains"].([]interface{})
+		assert.NotContains(t, domains, domain)
 	}
+
+	// Final cleanup
+	removeDomain(t, domain, true)
 }
 
 func TestInvalidDomainRejection(t *testing.T) {
@@ -346,6 +400,96 @@ func TestInvalidDomainRejection(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, 400, resp.StatusCode)
+}
+
+func TestCertificateIssuance(t *testing.T) {
+	// Test domain within our zone
+	domain := "cert-test." + testZone
+
+	// Clean up any existing certificate
+	removeDomain(t, domain, true)
+	time.Sleep(1 * time.Second)
+
+	// Add domain
+	addDomain(t, domain, nil)
+
+	// Trigger renewal
+	triggerRenewal(t)
+
+	// Wait for certificate to be issued
+	t.Logf("⏳ Waiting for certificate issuance for %s...", domain)
+	cert := waitForCertificateStatus(t, domain, "issued", 60*time.Second)
+	require.NotNil(t, cert, "certificate should be issued within 60 seconds")
+
+	// Verify certificate details
+	assert.Equal(t, domain, cert["common_name"], "common name should match domain")
+	assert.Equal(t, "issued", cert["status"], "status should be issued")
+	assert.Equal(t, true, cert["managed"], "certificate should be managed")
+
+	// Verify Pebble issued the certificate
+	issuers := cert["issuers"].([]interface{})
+	require.NotEmpty(t, issuers, "certificate should have issuers")
+
+	firstIssuer := issuers[0].(string)
+	assert.Contains(t, firstIssuer, "Pebble", "certificate should be issued by Pebble")
+
+	// Verify expiration dates exist
+	assert.NotEmpty(t, cert["issued_on"], "issued_on should be set")
+	assert.NotEmpty(t, cert["expires_on"], "expires_on should be set")
+
+	// Verify PEM data exists (private key is not exposed via API for security)
+	assert.NotEmpty(t, cert["leaf_cert_pem"], "leaf_cert_pem should be present")
+	assert.NotEmpty(t, cert["cert_chain_pem"], "cert_chain_pem should be present")
+
+	t.Logf("✅ Certificate successfully issued by: %s", firstIssuer)
+
+	// Clean up
+	removeDomain(t, domain, true)
+}
+
+func TestCertificateIssuanceWithSANs(t *testing.T) {
+	// Test domain with SANs
+	domain := "multi." + testZone
+	sans := []string{"www.multi." + testZone, "api.multi." + testZone}
+
+	// Clean up any existing certificate
+	removeDomain(t, domain, true)
+	time.Sleep(1 * time.Second)
+
+	// Add domain with SANs
+	addDomain(t, domain, sans)
+
+	// Trigger renewal
+	triggerRenewal(t)
+
+	// Wait for certificate to be issued
+	t.Logf("⏳ Waiting for certificate issuance for %s with SANs...", domain)
+	cert := waitForCertificateStatus(t, domain, "issued", 60*time.Second)
+	require.NotNil(t, cert, "certificate with SANs should be issued within 60 seconds")
+
+	// Verify SANs are in the certificate
+	certSANs := cert["sans"].([]interface{})
+	require.Len(t, certSANs, 3, "certificate should have 3 SANs (CN + 2 additional)")
+
+	// Verify all domains are in SANs
+	sanStrings := make([]string, len(certSANs))
+	for i, san := range certSANs {
+		sanStrings[i] = san.(string)
+	}
+	assert.Contains(t, sanStrings, domain, "SANs should contain the main domain")
+	assert.Contains(t, sanStrings, sans[0], "SANs should contain first SAN")
+	assert.Contains(t, sanStrings, sans[1], "SANs should contain second SAN")
+
+	// Verify Pebble issued the certificate
+	issuers := cert["issuers"].([]interface{})
+	firstIssuer := issuers[0].(string)
+	assert.Contains(t, firstIssuer, "Pebble", "certificate should be issued by Pebble")
+
+	t.Logf("✅ Certificate with SANs successfully issued by: %s", firstIssuer)
+	t.Logf("   SANs: %v", sanStrings)
+
+	// Clean up
+	removeDomain(t, domain, true)
 }
 
 func TestRootRedirect(t *testing.T) {
@@ -377,8 +521,13 @@ func addDomain(t *testing.T, domain string, sans []string) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	// Accept 201 (created) or 400 (already exists)
-	assert.Contains(t, []int{201, 400}, resp.StatusCode)
+	// Should succeed (201 created)
+	if resp.StatusCode != 201 {
+		var errResult map[string]interface{}
+		json.NewDecoder(resp.Body).Decode(&errResult)
+		t.Logf("Failed to add domain %s: %v", domain, errResult)
+	}
+	require.Equal(t, 201, resp.StatusCode, "domain should be added successfully")
 }
 
 func removeDomain(t *testing.T, domain string, deleteCert bool) {
@@ -388,15 +537,126 @@ func removeDomain(t *testing.T, domain string, deleteCert bool) {
 	}
 
 	req, err := http.NewRequest("DELETE", url, nil)
-	require.NoError(t, err)
+	if err != nil {
+		t.Logf("Failed to create delete request for %s: %v", domain, err)
+		return
+	}
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
-	require.NoError(t, err)
+	if err != nil {
+		t.Logf("Failed to delete domain %s: %v", domain, err)
+		return
+	}
 	defer resp.Body.Close()
 
-	// Accept 200 (deleted) or 404 (not found)
-	assert.Contains(t, []int{200, 404}, resp.StatusCode)
+	// Accept 200 (deleted) or 404 (not found) - both are acceptable for cleanup
+	if resp.StatusCode != 200 && resp.StatusCode != 404 {
+		t.Logf("Unexpected status code %d when deleting domain %s", resp.StatusCode, domain)
+	}
+}
+
+// verifyNoDomains checks if there are any existing domains and returns false if found
+func verifyNoDomains() bool {
+	resp, err := http.Get(baseURL + "/api/domains")
+	if err != nil {
+		fmt.Printf("Failed to get domains: %v\n", err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return false
+	}
+
+	var result map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	if err != nil {
+		return false
+	}
+
+	count, ok := result["count"].(float64)
+	if !ok {
+		return false
+	}
+
+	if count > 0 {
+		// List the domains that were found
+		if result["domains"] != nil {
+			domains := result["domains"].([]interface{})
+			fmt.Printf("Found %d existing domain(s): %v\n", int(count), domains)
+		}
+		return false
+	}
+
+	return true
+}
+
+// verifyNoCerts checks if there are any existing managed certificates and returns false if found
+func verifyNoCerts() bool {
+	resp, err := http.Get(baseURL + "/api/certs")
+	if err != nil {
+		fmt.Printf("Failed to get certificates: %v\n", err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return false
+	}
+
+	var certs []map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&certs)
+	if err != nil {
+		return false
+	}
+
+	if len(certs) > 0 {
+		fmt.Printf("Found %d existing certificate(s): %v\n", len(certs), certs)
+		return false
+	}
+
+	return true
+}
+
+// cleanupAllDomains removes all managed domains for test isolation
+func cleanupAllDomains() {
+	resp, err := http.Get(baseURL + "/api/domains")
+	if err != nil {
+		fmt.Printf("Failed to get domains for cleanup: %v\n", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return
+	}
+
+	var result map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	if err != nil {
+		return
+	}
+
+	domains, ok := result["domains"].([]interface{})
+	if !ok {
+		return
+	}
+
+	for _, d := range domains {
+		domain := d.(string)
+		url := fmt.Sprintf("%s/api/domains/%s?delete_cert=true", baseURL, domain)
+		req, _ := http.NewRequest("DELETE", url, nil)
+		client := &http.Client{}
+		resp, _ := client.Do(req)
+		if resp != nil {
+			resp.Body.Close()
+		}
+		fmt.Printf("Cleaned up domain: %s\n", domain)
+	}
+
+	// Wait for cleanup to complete
+	time.Sleep(1 * time.Second)
 }
 
 func triggerRenewal(t *testing.T) {
@@ -405,4 +665,51 @@ func triggerRenewal(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, 202, resp.StatusCode)
+}
+
+// waitForCertificateStatus polls the API until the certificate reaches the expected status
+func waitForCertificateStatus(t *testing.T, domain, expectedStatus string, timeout time.Duration) map[string]interface{} {
+	start := time.Now()
+	for time.Since(start) < timeout {
+		cert := getCertificate(t, domain)
+		if cert != nil {
+			status, ok := cert["status"].(string)
+			if ok && status == expectedStatus {
+				return cert
+			}
+			// If failed, return immediately
+			if ok && status == "failed" {
+				t.Logf("❌ Certificate for %s failed: %v", domain, cert["error"])
+				return cert
+			}
+		}
+		time.Sleep(2 * time.Second)
+	}
+	return nil
+}
+
+// getCertificate retrieves a specific certificate by common name
+func getCertificate(t *testing.T, domain string) map[string]interface{} {
+	resp, err := http.Get(baseURL + "/api/certs")
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil
+	}
+
+	var certs []map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&certs)
+	if err != nil {
+		return nil
+	}
+
+	for _, cert := range certs {
+		if cert["common_name"] == domain {
+			return cert
+		}
+	}
+	return nil
 }

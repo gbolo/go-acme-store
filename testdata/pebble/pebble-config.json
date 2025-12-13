@@ -18,8 +18,7 @@
         "default": {
           "description": "The profile you know and love",
           "validityPeriod": 7776000,
-          "promoteCommonName": true,
-          "PromoteCommonName": true
+          "promoteCommonName": true
         },
         "shortlived": {
           "description": "A short-lived cert profile, without actual enforcement",

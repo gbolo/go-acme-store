@@ -1,0 +1,76 @@
+services:
+  acme-store:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION:-devel}
+        COMMIT_REF: ${COMMIT_REF:-unknown}
+    image: acme-store:latest
+    container_name: acme-store
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      
+      # Server
+      SERVER_BIND_ADDRESS: 0.0.0.0
+      SERVER_BIND_PORT: 8080
+      
+      # ACME Configuration
+      ACME_DIRECTORY: ${ACME_DIRECTORY:-https://acme-staging-v02.api.letsencrypt.org/directory}
+      ACME_ACCOUNT_EMAIL: ${ACME_ACCOUNT_EMAIL}
+      ACME_DNS_SERVER: ${ACME_DNS_SERVER:-8.8.8.8:53}
+      ACME_DNS_PROVIDER: ${ACME_DNS_PROVIDER:-digitalocean}
+      ACME_TLS_INSECURE_SKIP_VERIFY: ${ACME_TLS_INSECURE_SKIP_VERIFY:-false}
+      
+      # DNS Provider Tokens (use appropriate one based on ACME_DNS_PROVIDER)
+      DIGITALOCEAN_TOKEN: ${DIGITALOCEAN_TOKEN}
+      POWERDNS_SERVER_URL: ${POWERDNS_SERVER_URL}
+      POWERDNS_API_TOKEN: ${POWERDNS_API_TOKEN}
+      POWERDNS_SERVER_ID: ${POWERDNS_SERVER_ID:-localhost}
+      ACMEDNS_SERVER_URL: ${ACMEDNS_SERVER_URL}
+      
+      # Vault Configuration
+      VAULT_ADDR: ${VAULT_ADDR:-http://vault:8200}
+      VAULT_TOKEN: ${VAULT_TOKEN}
+      VAULT_KV2_MOUNT: ${VAULT_KV2_MOUNT:-kv}
+      VAULT_KV2_SECRET_PATH: ${VAULT_KV2_SECRET_PATH:-acme}
+      VAULT_TLS_SKIP_VERIFY: ${VAULT_TLS_SKIP_VERIFY:-false}
+    volumes:
+      # Mount config file (optional - can use env vars instead)
+      - ./config.yml:/etc/acme-store/config.yml:ro
+    networks:
+      - acme-network
+    depends_on:
+      vault:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # Optional: Include Vault for development/testing
+  vault:
+    image: hashicorp/vault:latest
+    container_name: acme-vault
+    restart: unless-stopped
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_TOKEN:-root}
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    cap_add:
+      - IPC_LOCK
+    command: server -dev
+    networks:
+      - acme-network
+
+networks:
+  acme-network:
+    driver: bridge
+

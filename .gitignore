@@ -6,3 +6,5 @@ bin/
 acme-store
 acme-store-fetcher
 certs/
+testdata/certs/
+acme-dns-accounts.json

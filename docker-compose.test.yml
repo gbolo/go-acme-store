@@ -1,0 +1,188 @@
+services:
+  # HashiCorp Vault in dev mode (INSECURE - TEST ONLY)
+  vault:
+    image: hashicorp/vault:latest
+    container_name: acme-vault
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "root"
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+    cap_add:
+      - IPC_LOCK
+    command: server -dev
+
+  # Pebble - Let's Encrypt ACME test server
+  pebble:
+    image: ghcr.io/letsencrypt/pebble:latest
+    container_name: acme-pebble
+    ports:
+      - "14000:14000"  # ACME API
+      - "15000:15000"  # Management API
+    environment:
+      PEBBLE_VA_NOSLEEP: 1
+      PEBBLE_VA_ALWAYS_VALID: 0
+    command: -config /test/config/pebble-config.json -dnsserver 172.28.0.4:53533
+    volumes:
+      - ./testdata/pebble:/test/config
+    depends_on:
+      - powerdns
+
+  # powerdnsserver for DNS-01 challenges
+  powerdns:
+    image: powerdns/pdns-auth-49
+    container_name: acme-powerdns
+    ports:
+      - "8053:8053"          # HTTP API
+    expose:
+      - "53533/tcp"        # DNS (internal only)
+      - "53533/udp"        # DNS (internal only)
+    volumes:
+      - ./testdata/pdns:/etc/powerdns/pdns.d
+    networks:
+      default:
+        ipv4_address: 172.28.0.4
+
+  # Initialize Vault with KV v2 secrets engine
+  vault-init:
+    image: hashicorp/vault:latest
+    container_name: acme-vault-init
+    environment:
+      VAULT_ADDR: "http://vault:8200"
+      VAULT_TOKEN: "root"
+    depends_on:
+      - vault
+    command: >
+      sh -c '
+        echo "Waiting for Vault to be ready...";
+        sleep 2;
+        echo "Enabling KV v2 secrets engine...";
+        vault secrets enable -version=2 -path=kv kv || echo "KV engine already enabled";
+        echo "Vault initialized successfully!";
+      '
+    restart: "no"
+
+  # Initialize PowerDNS with test zone
+  powerdns-setup:
+    image: curlimages/curl:latest
+    container_name: acme-powerdns-setup
+    depends_on:
+      - powerdns
+    networks:
+      - default
+    command: >
+      sh -c '
+        echo "Waiting for PowerDNS API to be ready...";
+        sleep 5;
+        
+        echo "Creating zone acme.test...";
+        curl -X POST "http://powerdns:8053/api/v1/servers/localhost/zones" \
+          -H "X-API-Key: secret" \
+          -H "Content-Type: application/json" \
+          -d "{
+            \"name\": \"acme.test.\",
+            \"kind\": \"Native\",
+            \"masters\": [],
+            \"nameservers\": []
+          }" || echo "Zone may already exist";
+        
+        echo "Setting up NS records for acme.test...";
+        curl -X PATCH "http://powerdns:8053/api/v1/servers/localhost/zones/acme.test." \
+          -H "X-API-Key: secret" \
+          -H "Content-Type: application/json" \
+          -d "{
+            \"rrsets\": [
+              {
+                \"name\": \"acme.test.\",
+                \"type\": \"NS\",
+                \"ttl\": 3600,
+                \"changetype\": \"REPLACE\",
+                \"records\": [
+                  {
+                    \"content\": \"ns.acme.test.\",
+                    \"disabled\": false
+                  }
+                ]
+              },
+              {
+                \"name\": \"ns.acme.test.\",
+                \"type\": \"A\",
+                \"ttl\": 300,
+                \"changetype\": \"REPLACE\",
+                \"records\": [
+                  {
+                    \"content\": \"172.28.0.4\",
+                    \"disabled\": false
+                  }
+                ]
+              }
+            ]
+          }";
+        
+        echo "PowerDNS zone setup complete!";
+        echo "Zone created: acme.test.";
+        echo "NS: acme.test. -> ns.acme.test. (172.28.0.4)";
+      '
+    restart: "no"
+
+  # ACME Store API - The application under test
+  acme-store:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: test
+        COMMIT_REF: test
+    image: acme-store:test
+    container_name: acme-store-test
+    ports:
+      - "15872:15872"
+    environment:
+      # Logging (prefixed with ACMESTORE_)
+      ACMESTORE_LOG_LEVEL: DEBUG
+      
+      # Server (prefixed with ACMESTORE_)
+      ACMESTORE_SERVER_BIND_ADDRESS: 0.0.0.0
+      ACMESTORE_SERVER_BIND_PORT: 15872
+      
+      # # ACME Configuration (prefixed with ACMESTORE_)
+      # ACMESTORE_ACME_DIRECTORY: https://pebble:14000/dir
+      # ACMESTORE_ACME_ACCOUNT_EMAIL: test@example.com
+      # ACMESTORE_ACME_DNS_SERVER: challtestsrv:53
+      # ACMESTORE_ACME_DNS_PROVIDER: digitalocean
+      # ACMESTORE_ACME_DIGITALOCEAN_TOKEN: test-token
+      ACME_TLS_INSECURE: "1"
+      
+      # # Vault Configuration (prefixed with ACMESTORE_)
+      # ACMESTORE_VAULT_ADDRESS: http://vault:8200
+      # ACMESTORE_VAULT_TOKEN: root
+      # ACMESTORE_VAULT_KV2_MOUNT: kv
+      # ACMESTORE_VAULT_KV2_SECRET_PATH: test/acme
+      # ACMESTORE_VAULT_TLS_SKIP_VERIFY: "false"
+    volumes:
+      - ./testdata/config/test.yml:/etc/acme-store/config.yml:ro
+    networks:
+      - default
+    depends_on:
+      - vault
+      - pebble
+      - powerdns
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:15872/api/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+networks:
+  default:
+    name: acme-test-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+
+volumes:
+  acme-dns-data:
+

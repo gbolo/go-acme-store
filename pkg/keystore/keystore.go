@@ -49,6 +49,13 @@ func (c *CertAndKey) populateMissingFields() (err error) {
 	// populate
 	c.LeafCertPEM = crypto.CertToPEM(cert)
 	c.CommonName = cert.Subject.CommonName
+
+	// Modern certificates often have empty CN and rely on SANs
+	// If CN is empty, use the first SAN as the CommonName
+	if c.CommonName == "" && len(cert.DNSNames) > 0 {
+		c.CommonName = cert.DNSNames[0]
+	}
+
 	c.IssuedOn = cert.NotBefore.String()
 	c.Expiration = cert.NotAfter.String()
 	c.SANs = cert.DNSNames

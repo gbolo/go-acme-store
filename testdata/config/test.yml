@@ -1,0 +1,28 @@
+log:
+  level: DEBUG
+
+server:
+  bind_address: 127.0.0.1
+  bind_port: 15872
+
+acme:
+  # Use Pebble ACME test server
+  directory: "https://pebble:14000/dir"
+  account_email: test@example.com
+  dns_server: "172.28.0.4:53533"
+  dns_provider: "powerdns"
+  # Skip TLS verification for Pebble test server (uses self-signed certs)
+  tls_insecure_skip_verify: true
+  powerdns_server_url: "http://acme-powerdns:8053"
+  powerdns_api_token: "secret"
+  powerdns_server_id: "localhost"
+
+vault:
+  # Use environment variable VAULT_ADDR for Docker, or localhost for local testing
+  address: "http://vault:8200"
+  token: "root"
+  kv2_mount: kv
+  kv2_secret_path: test/acme
+  tls_skip_verify: false
+
+

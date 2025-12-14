@@ -8,7 +8,7 @@ log:
 fetcher:
   # Directory where certificate files will be saved
   # Default: ./certs
-  output_dir: "/etc/ssl/acme-certs"
+  output_dir: "/etc/tls/acme-certs"
   
   # Optional: Generate Traefik configuration file
   # Uncomment to enable Traefik config generation
@@ -22,10 +22,6 @@ vault:
   tls_skip_verify: false
   # Set via environment variable: VAULT_TOKEN=xxx
 
-# ACME configuration (only account_email is used by fetcher)
-acme:
-  account_email: acme@example.com
-  # Other ACME settings are ignored by fetcher
 
 # Note: Command-line flags override these settings
 # Example:

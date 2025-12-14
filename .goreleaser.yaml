@@ -155,7 +155,6 @@ dockers_v2:
     
     # Extra files to include in build context
     extra_files:
-      - web/
       - config.yml
     
     # OCI labels

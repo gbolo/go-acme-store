@@ -926,6 +926,37 @@ footer {
     font-size: 0.9em;
 }
 
+footer p {
+    margin: 8px 0;
+}
+
+footer .footer-link {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+footer a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+footer a:hover {
+    color: var(--primary-color);
+}
+
+footer a svg {
+    transition: transform 0.2s ease;
+}
+
+footer a:hover svg {
+    transform: scale(1.1);
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     header h1 {

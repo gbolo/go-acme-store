@@ -12,7 +12,7 @@ RUN addgroup -g 1000 acme && \
     adduser -D -u 1000 -G acme acme
 
 # Create necessary directories
-RUN mkdir -p /app /app/web /etc/acme-store && \
+RUN mkdir -p /app /etc/acme-store && \
     chown -R acme:acme /app /etc/acme-store
 
 WORKDIR /app
@@ -20,12 +20,9 @@ WORKDIR /app
 # Build arg for target platform (provided by buildx)
 ARG TARGETPLATFORM
 
-# Copy pre-built binary from goreleaser context
+# Copy pre-built binary from goreleaser context (web UI is now embedded)
 # GoReleaser organizes binaries by platform: linux/amd64/acme-store, linux/arm64/acme-store, etc.
 COPY ${TARGETPLATFORM}/acme-store .
-
-# Copy web UI files from goreleaser context
-COPY web ./web
 
 # Copy default config
 COPY config.yml /etc/acme-store/config.yml

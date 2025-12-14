@@ -48,3 +48,5 @@ dist/
 
 # GoReleaser
 .goreleaser.yaml.lock
+# Note: pkg/webui/static is a copy of web/static for embedding
+# Keep web/static as the source of truth for development

@@ -5,8 +5,11 @@ import (
 	"go-acme-store/pkg/httpserver"
 	"go-acme-store/pkg/log"
 	"go-acme-store/pkg/meta"
+	"go-acme-store/pkg/webui"
+	"net/http"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/filesystem"
 	"github.com/spf13/viper"
 )
 
@@ -32,9 +35,13 @@ func httpServerDaemon(appName string) {
 	// ACME operations
 	api.Post("/trigger-renewal", handlerTriggerRenewal)
 
-	// UI routes
+	// UI routes - serve embedded static files
 	ui := fiberApp.Group("/ui")
-	ui.Static("/static", "./web/static")
+	ui.Use("/static", filesystem.New(filesystem.Config{
+		Root:       http.FS(webui.StaticFiles),
+		PathPrefix: "static",
+		Browse:     false,
+	}))
 	ui.Get("/", handlerWebUI)
 
 	listenAddress := fmt.Sprintf("%s:%s", viper.GetString("server.bind_address"), viper.GetString("server.bind_port"))
@@ -127,7 +134,13 @@ func handlerConfig(c *fiber.Ctx) (err error) {
 }
 
 func handlerWebUI(c *fiber.Ctx) (err error) {
-	return c.SendFile("./web/static/index.html")
+	// Read index.html from embedded filesystem
+	indexHTML, err := webui.StaticFiles.ReadFile("static/index.html")
+	if err != nil {
+		return c.Status(500).SendString("Failed to load UI")
+	}
+	c.Set("Content-Type", "text/html")
+	return c.Send(indexHTML)
 }
 
 func handlerCerts(c *fiber.Ctx) (err error) {

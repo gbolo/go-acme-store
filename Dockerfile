@@ -32,16 +32,13 @@ RUN addgroup -g 1000 acme && \
     adduser -D -u 1000 -G acme acme
 
 # Create necessary directories
-RUN mkdir -p /app /app/web /etc/acme-store && \
+RUN mkdir -p /app /etc/acme-store && \
     chown -R acme:acme /app /etc/acme-store
 
 WORKDIR /app
 
-# Copy binary from builder
+# Copy binary from builder (web UI is now embedded)
 COPY --from=builder /build/acme-store .
-
-# Copy web UI files
-COPY --from=builder /build/web ./web
 
 # Copy default config (optional)
 COPY --from=builder /build/config.yml /etc/acme-store/config.yml.example

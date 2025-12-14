@@ -24,6 +24,3 @@ pkg/webui/
 
 Go's `//go:embed` directive can only embed files in the same package or subdirectories. Since we embed in the `pkg/webui` package, the files must be at `pkg/webui/static/`.
 
-## No Sync Needed!
-
-There is only one location for web UI files - no syncing or duplication required.

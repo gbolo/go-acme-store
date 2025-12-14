@@ -76,7 +76,7 @@ func (v *VaultKeystore) readDataIntoInterface(path string, destInterface interfa
 	return
 }
 
-func NewVaultKeystoreFromViper(accountEmail string) (Keystore, error) {
+func NewVaultKeystoreFromViper(accountEmail string, needsAcmeAccount bool) (Keystore, error) {
 	config := vault.DefaultConfig()
 	config.Address = viper.GetString("vault.address")
 
@@ -104,30 +104,34 @@ func NewVaultKeystoreFromViper(accountEmail string) (Keystore, error) {
 		secretPath: viper.GetString("vault.kv2_secret_path"),
 	}
 
-	// attempt to reuse existing acme account
-	storedAccount, err := ks.getAccount()
-	if err != nil {
-		return nil, err
-	}
-	if storedAccount != nil {
-		log.Infof("loaded saved acme account %s from %s", storedAccount.Email, ks.getAccountPath())
+	// Only handle ACME account if needed (e.g., for the daemon, not for the fetcher)
+	if needsAcmeAccount {
+		// attempt to reuse existing acme account
+		storedAccount, err := ks.getAccount()
+		if err != nil {
+			return nil, err
+		}
+		if storedAccount != nil {
+			log.Infof("loaded saved acme account %s from %s", storedAccount.Email, ks.getAccountPath())
+			return &ks, nil
+		}
+
+		// create a new account key because one does not exist
+		accountKeyPEM, err := crypto.GenerateECKeyPEM()
+		if err != nil {
+			return nil, err
+		}
+
+		err = ks.storeAccount(AcmeAccount{
+			Email: accountEmail,
+			Key:   accountKeyPEM,
+		})
+		if err == nil {
+			log.Infof("account pki generated and stored for %s", accountEmail)
+		}
 		return &ks, err
 	}
-
-	// create a new account key because one does not exist
-	accountKeyPEM, err := crypto.GenerateECKeyPEM()
-	if err != nil {
-		return nil, err
-	}
-
-	err = ks.storeAccount(AcmeAccount{
-		Email: accountEmail,
-		Key:   accountKeyPEM,
-	})
-	if err == nil {
-		log.Infof("account pki generated and stored for %s", accountEmail)
-	}
-	return &ks, err
+	return &ks, nil
 }
 
 func (v *VaultKeystore) GetAcmeAccount() (account AcmeAccount, err error) {

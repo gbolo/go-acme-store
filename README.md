@@ -1,205 +1,213 @@
 # ACME Certificate Store
 
-A Go application that automates ACME certificate management with a beautiful web UI for monitoring.
+Automated certificate management with ACME protocol support, secure storage, and a modern web UI.
 
-## Features
+## Purpose
 
-- 🔐 **Automated ACME Certificate Management**: Automatically obtains and renews SSL/TLS certificates using the ACME protocol
-- 🏦 **Secure Storage**: Securely stores certificates and private keys in Vault's KV v2 secrets engine
-- 🌐 **Modern Web UI**: Beautiful, responsive web interface to monitor and manage certificates
-- ⚙️ **Domain Management**: Add/remove domains via Web UI or REST API without restarting
-- 🔄 **Automatic Renewal**: Monitors certificate expiration and automatically renews certificates
-- 📊 **Real-time Statistics**: Dashboard showing certificate status, expiration dates, and health metrics
-- 🔄 **Status Tracking**: Real-time status updates (Pending → Issued/Failed) with error reporting
-- 🔍 **DNS Challenge Support**: Currently supports DigitalOcean DNS provider for DNS-01 challenges
-- 📱 **Responsive Design**: Works seamlessly on desktop and mobile devices
-
-## Web UI
-
-The application includes a modern web interface accessible at the root URL (e.g., `http://localhost:15872/`).
-
-### Features:
-- **Certificate Dashboard**: View all managed certificates at a glance
-- **Status Indicators**: Visual indicators for valid, expiring soon, and expired certificates
-- **Certificate Details**: View detailed information including:
-  - Common Name and SANs (Subject Alternative Names)
-  - Issuer information
-  - Issue and expiration dates
-  - Days until expiration
-- **Certificate Viewer**: View and copy PEM-encoded certificates
-- **Chain Viewer**: View complete certificate chains
-- **Real-time Updates**: Refresh button to fetch latest certificate data
+ACME Certificate Store automates the entire lifecycle of TLS certificates:
+- Obtains certificates from ACME providers (Let's Encrypt, etc.) using DNS-01 challenge.
+- Stores certificates and keys securely in HashiCorp Vault
+- Monitors expiration and automatically renews certificates
+- Provides a web UI and REST API for management
+- Includes a fetcher tool for deploying certificates and keys to other systems
 
 ## Configuration
 
-Edit `config.yml` to configure the application:
+Configuration can be provided via:
+1. Configuration file (YAML)
+2. Environment variables
 
+### Environment Variable Format
+
+Environment variables use the prefix `ACMESTORE_` followed by the config path with underscores:
+
+```bash
+# Config file:
+acme:
+  directory: https://acme-v02.api.letsencrypt.org/directory
+  
+# Environment variable:
+ACMESTORE_ACME_DIRECTORY=https://acme-v02.api.letsencrypt.org/directory
+```
+
+**Precedence:** Environment variables override config file values.
+
+### Configuration Options
+
+#### Server
+```yaml
+server:
+  bind_address: 0.0.0.0  # Listen address
+  bind_port: 15872       # HTTP port
+```
+
+Environment variables:
+- `ACMESTORE_SERVER_BIND_ADDRESS`
+- `ACMESTORE_SERVER_BIND_PORT`
+
+#### Logging
 ```yaml
 log:
-  level: INFO
+  level: INFO            # DEBUG, INFO, WARN, ERROR
+```
 
-server:
-  bind_address: 127.0.0.1
-  bind_port: 15872
+Environment variable:
+- `ACMESTORE_LOG_LEVEL`
 
+#### ACME
+```yaml
 acme:
-  # ACME directory server to use
-  directory: "https://acme-staging-v02.api.letsencrypt.org/directory"
-  # ACME account to use (private key will get created if it does not exist)
-  account_email: your-email@example.com
-  # DNS server to use for validating dns challenge
-  dns_server: 8.8.8.8:53
-  # currently ONLY digitalocean is supported
+  directory: https://acme-v02.api.letsencrypt.org/directory
+  account_email: admin@example.com
   dns_provider: digitalocean
+  dns_server: 8.8.8.8:53              # Optional: Custom DNS resolver
+  tls_insecure_skip_verify: false     # Only for testing!
+  
+  # DigitalOcean DNS
+  digitalocean_token: your-token
+  
+  # PowerDNS
+  powerdns_server_url: http://pdns:8081
+  powerdns_api_token: secret
+  powerdns_server_id: localhost
+  
+  # ACME-DNS
+  acmedns_server_url: http://acme-dns:8053
+```
 
+Environment variables:
+- `ACMESTORE_ACME_DIRECTORY`
+- `ACMESTORE_ACME_ACCOUNT_EMAIL`
+- `ACMESTORE_ACME_DNS_PROVIDER`
+- `ACMESTORE_ACME_DNS_SERVER`
+- `ACMESTORE_ACME_TLS_INSECURE_SKIP_VERIFY`
+- `ACMESTORE_ACME_DIGITALOCEAN_TOKEN`
+- `ACMESTORE_ACME_POWERDNS_SERVER_URL`
+- `ACMESTORE_ACME_POWERDNS_API_TOKEN`
+- `ACMESTORE_ACME_POWERDNS_SERVER_ID`
+- `ACMESTORE_ACME_ACMEDNS_SERVER_URL`
+
+#### Vault
+```yaml
 vault:
-  address: "http://127.0.0.1:8200"
-  # path where a KV (v2) secrets engine is mounted
+  address: http://vault:8200
+  token: your-token
   kv2_mount: kv
-  # path (relative to mount) where we want to store our secrets
-  kv2_secret_path: platform/acme
-  # skip TLS certificate verification (useful for self-signed certs in dev/test)
+  kv2_secret_path: acme
   tls_skip_verify: false
 ```
 
-**Note**: Domains are now managed via Vault using the API endpoints (see API section below).
+Environment variables:
+- `ACMESTORE_VAULT_ADDRESS`
+- `ACMESTORE_VAULT_TOKEN`
+- `ACMESTORE_VAULT_KV2_MOUNT`
+- `ACMESTORE_VAULT_KV2_SECRET_PATH`
+- `ACMESTORE_VAULT_TLS_SKIP_VERIFY`
 
-### Environment Variables
+### DNS Provicer Configuration
 
-Set these environment variables for sensitive data:
+See [DNS_PROVIDERS.md](DNS_PROVIDERS.md) for DNS provider configuration.
 
-- `VAULT_TOKEN`: HashiCorp Vault authentication token
-- `DIGITALOCEAN_TOKEN`: DigitalOcean API token for DNS challenges
-- `CONFIG_FILE`: Path to configuration file (default: `./config.yml`)
+### Example Configuration
 
-## API Endpoints
+See [config.yml](config.yml) for a complete example.
 
-### Web UI
-- `GET /` - Redirects to `/ui`
-- `GET /ui` - Web UI dashboard
-- `GET /ui/static/*` - Static assets (CSS, JS, images)
+## API Documentation
 
-### API - Certificates
-- `GET /api/certs` - JSON API returning all certificates with details
+See [API.md](API.md) for complete REST API documentation.
 
-### API - Domain Management
-- `GET /api/domains` - List all managed domains
-- `POST /api/domains` - Add a domain to manage
-  - Body: `{"domain": "example.com", "sans": ["www.example.com", "api.example.com"]}`
-  - SANs are optional
-- `DELETE /api/domains/{domain}` - Remove domain (soft delete - marks as unmanaged)
-- `DELETE /api/domains/{domain}?delete_cert=true` - Remove domain and delete certificate
+### Quick API Examples
 
-### API - ACME Operations
-- `POST /api/trigger-renewal` - Manually trigger certificate issuance/renewal for all managed domains
+```bash
+# Health check
+curl http://localhost:15872/api/healthz
 
-### API - System
-- `GET /api/healthz` - Health check endpoint
-- `GET /api/version` - Application version information
-- `GET /api/config` - View non-sensitive configuration
+# List certificates
+curl http://localhost:15872/api/certs
 
-### Monitoring
-- `GET /metrics` - Server metrics and monitoring
+# Add domain
+curl -X POST http://localhost:15872/api/domains \
+  -H "Content-Type: application/json" \
+  -d '{"domain":"example.com","sans":["www.example.com"]}'
 
-## Components
+# Remove domain
+curl -X DELETE http://localhost:15872/api/domains/example.com
 
-This project includes two applications:
+# Trigger renewal
+curl -X POST http://localhost:15872/api/trigger-renewal
+```
 
-### 1. acme-store (Main Daemon)
-- Obtains and renews ACME certificates automatically
-- Stores certificates securely in Vault
-- Provides Web UI for management
-- Exposes REST API for automation
+## Web UI
 
-### 2. acme-store-fetcher (CLI Tool)
+Access the web interface at `http://localhost:15872/`
+
+Features:
+- Certificate dashboard with status indicators
+- View certificate details and chains
+- Add/remove domains
+- Manual renewal triggers
+- Real-time status updates
+
+## Building from Source
+
+```bash
+# Build both binaries
+make build
+
+# Build daemon only
+make build-daemon
+
+# Build fetcher only
+make build-fetcher
+
+# Run tests
+make test
+
+# Run integration tests
+make test-all
+```
+
+## Docker
+
+### Build Image
+```bash
+docker build -t acme-store:latest .
+```
+
+### Run Container
+```bash
+docker run -d \
+  -p 15872:15872 \
+  -v $(pwd)/config.yml:/etc/acme-store/config.yml:ro \
+  -e ACMESTORE_VAULT_TOKEN=your-token \
+  acme-store:latest
+```
+
+## Vault Setup
+
+The application requires Vault with KV v2 secrets engine:
+
+```bash
+# Enable KV v2
+vault secrets enable -version=2 -path=kv kv
+
+# Verify
+vault secrets list
+```
+
+Vault will store:
+- ACME account key and registration
+- Domain list (managed domains)
+- Certificates and private keys
+
+
+## acme-store-fetcher (Optional Companion CLI)
 - Fetches certificates from Vault
-- Exports to disk as PEM files
-- Generates Traefik configuration automatically
-- Useful for deploying to web servers (nginx, Apache, Traefik, HAProxy, etc.)
-- See [FETCHER.md](FETCHER.md) for details
+- Deploys to local filesystem
+- Generates Traefik dynamic configuration
+- Runs as a cron job or one-shot command
 
-## Building and Running
-
-### Prerequisites
-
-- Go 1.21 or later
-- HashiCorp Vault instance (with KV v2 secrets engine enabled)
-- DNS provider credentials (currently DigitalOcean)
-
-### Build
-
-```bash
-# Build main daemon
-go build -o acme-store ./cmd/acme-store
-
-# Build fetcher tool
-go build -o acme-store-fetcher ./cmd/acme-store-fetcher
-```
-
-### Run
-
-```bash
-export VAULT_TOKEN="your-vault-token"
-export DIGITALOCEAN_TOKEN="your-do-token"
-./acme-store
-```
-
-Or specify a custom config file:
-
-```bash
-./acme-store -config /path/to/custom-config.yml
-```
-
-Command-line flags:
-- `-config` - Path to configuration file (overrides CONFIG_FILE env var and default)
-
-The application will:
-1. Initialize connection to HashiCorp Vault
-2. Load domains from configuration
-3. Start the ACME daemon for certificate management
-4. Start the HTTP server with web UI
-
-Access the web UI at: `http://127.0.0.1:15872/ui`
-
-## Project Structure
-
-```
-.
-├── cmd/
-│   └── acme-store/          # Main application
-│       ├── main.go          # Entry point
-│       ├── httpserver.go    # HTTP server and handlers
-│       ├── keystore.go      # Keystore initialization
-│       └── worker.go        # ACME daemon worker
-├── pkg/
-│   ├── acme/                # ACME protocol implementation
-│   ├── config/              # Configuration management
-│   ├── crypto/              # Certificate utilities
-│   ├── httpserver/          # HTTP server setup
-│   ├── keystore/            # Vault and storage abstractions
-│   ├── log/                 # Logging utilities
-│   └── meta/                # Application metadata
-├── web/
-│   └── static/              # Web UI assets
-│       ├── index.html       # Main UI page
-│       ├── style.css        # Styles
-│       └── app.js           # JavaScript application
-└── config.yml               # Configuration file
-```
-
-## Security Considerations
-
-- Store sensitive credentials in environment variables, not in `config.yml`
-- Use HTTPS in production environments
-- Restrict access to the web UI using firewall rules or reverse proxy authentication
-- Regularly rotate Vault tokens
-- Use production ACME servers (not staging) for production certificates
-
+See [FETCHER.md](FETCHER.md) for fetcher documentation.
 ## License
 
-[Add your license here]
-
-## Contributing
-
-[Add contribution guidelines here]
-
+MIT

@@ -51,10 +51,10 @@ sudo chmod +x /usr/local/bin/acme-store-fetcher
 ./acme-store-fetcher -config /etc/acme-store/config.yml
 
 # Specify output directory (via flag)
-./acme-store-fetcher -output-dir /etc/ssl/acme-certs
+./acme-store-fetcher -output-dir /etc/tls/acme-certs
 
 # Specify output directory (via config file)
-# Add to config.yml: fetcher.output_dir: "/etc/ssl/acme-certs"
+# Add to config.yml: fetcher.output_dir: "/etc/tls/acme-certs"
 ./acme-store-fetcher -config /etc/acme-store/config.yml
 
 # Generate Traefik config (via flag)
@@ -86,7 +86,7 @@ You can set fetcher options in `config.yml`:
 ```yaml
 fetcher:
   # Directory to save certificate files
-  output_dir: "/etc/ssl/acme-certs"
+  output_dir: "/etc/tls/acme-certs"
   # Path to write Traefik configuration file (optional)
   traefik_config: "/etc/traefik/dynamic/acme-certs.yml"
 ```
@@ -107,13 +107,13 @@ For each managed domain with a valid certificate, two files are created:
 - **Filename**: `{domain}_cert-chain.pem`
 - **Contents**: Full certificate chain (leaf certificate + intermediate CA certificates)
 - **Permissions**: `0644` (readable by all)
-- **Use with**: nginx `ssl_certificate`, Apache `SSLCertificateFile`
+- **Use with**: nginx `ssl_certificate`, Apache `TLSCertificateFile`
 
 ### Private Key File
 - **Filename**: `{domain}_key.pem`
 - **Contents**: Private key for the certificate
 - **Permissions**: `0600` (readable only by owner)
-- **Use with**: nginx `ssl_certificate_key`, Apache `SSLCertificateKeyFile`
+- **Use with**: nginx `ssl_certificate_key`, Apache `TLSCertificateKeyFile`
 
 ### Wildcard Domain Handling
 
@@ -154,8 +154,8 @@ $ ./acme-store-fetcher
 ### Example 2: Custom Output Directory
 
 ```bash
-$ ./acme-store-fetcher -output-dir /etc/ssl/acme-certs
-2025-12-12T14:30:00.000-0500 INFO acme-store-fetcher/main.go:50 output directory: /etc/ssl/acme-certs
+$ ./acme-store-fetcher -output-dir /etc/tls/acme-certs
+2025-12-12T14:30:00.000-0500 INFO acme-store-fetcher/main.go:50 output directory: /etc/tls/acme-certs
 ...
 ```
 
@@ -210,9 +210,9 @@ server {
 <VirtualHost *:443>
     ServerName example.com
     
-    SSLEngine on
-    SSLCertificateFile /etc/ssl/acme-certs/example.com_cert-chain.pem
-    SSLCertificateKeyFile /etc/ssl/acme-certs/example.com_key.pem
+    TLSEngine on
+    TLSCertificateFile /etc/tls/acme-certs/example.com_cert-chain.pem
+    TLSCertificateKeyFile /etc/tls/acme-certs/example.com_key.pem
     
     # ... rest of config
 </VirtualHost>
@@ -222,7 +222,7 @@ server {
 
 ```
 frontend https_frontend
-    bind *:443 ssl crt /etc/ssl/acme-certs/example.com.pem
+    bind *:443 ssl crt /etc/tls/acme-certs/example.com.pem
     # Note: HAProxy needs cert+key in single file, see automation example below
 ```
 
@@ -335,7 +335,7 @@ HAProxy requires cert and key in a single file:
 #!/bin/bash
 # combine-for-haproxy.sh
 
-CERT_DIR="/etc/ssl/acme-certs"
+CERT_DIR="/etc/tls/acme-certs"
 HAPROXY_DIR="/etc/haproxy/certs"
 
 # Fetch certificates
@@ -379,8 +379,8 @@ systemctl reload haproxy
 **Solution:**
 ```bash
 # Ensure output directory is writable
-sudo mkdir -p /etc/ssl/acme-certs
-sudo chown $USER:$USER /etc/ssl/acme-certs
+sudo mkdir -p /etc/tls/acme-certs
+sudo chown $USER:$USER /etc/tls/acme-certs
 ```
 
 ### Vault connection failed
@@ -415,9 +415,9 @@ Ensure the output directory has appropriate permissions:
 
 ```bash
 # For system-wide certificates
-sudo mkdir -p /etc/ssl/acme-certs
-sudo chown root:root /etc/ssl/acme-certs
-sudo chmod 755 /etc/ssl/acme-certs
+sudo mkdir -p /etc/tls/acme-certs
+sudo chown root:root /etc/tls/acme-certs
+sudo chmod 755 /etc/tls/acme-certs
 
 # For user-specific
 mkdir -p ~/certs
@@ -459,7 +459,7 @@ Currently not supported, but you can filter after fetch:
 ./acme-store-fetcher -output-dir /tmp/all-certs
 
 # Copy only specific domain
-cp /tmp/all-certs/example.com_* /etc/ssl/acme-certs/
+cp /tmp/all-certs/example.com_* /etc/tls/acme-certs/
 ```
 
 ### Dry Run Mode

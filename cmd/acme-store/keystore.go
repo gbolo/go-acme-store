@@ -16,7 +16,7 @@ func initKeystore() {
 	defer mutex.Unlock()
 
 	var err error
-	ks, err = keystore.NewVaultKeystoreFromViper(viper.GetString("acme.account_email"))
+	ks, err = keystore.NewVaultKeystoreFromViper(viper.GetString("acme.account_email"), true)
 	if err != nil {
 		log.Errorf("failed to init vault client: %v", err)
 		log.Warnf("application will start in degraded mode - vault operations will fail until vault is available")

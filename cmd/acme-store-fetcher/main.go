@@ -54,9 +54,8 @@ func main() {
 		finalTraefikConfig = viper.GetString("fetcher.traefik_config")
 	}
 
-	// Initialize keystore (use account email from config for vault path)
-	accountEmail := viper.GetString("acme.account_email")
-	ks, err := keystore.NewVaultKeystoreFromViper(accountEmail)
+	// Initialize keystore (fetcher doesn't need ACME account)
+	ks, err := keystore.NewVaultKeystoreFromViper("", false)
 	if err != nil {
 		log.Fatalf("failed to initialize vault keystore: %v", err)
 	}

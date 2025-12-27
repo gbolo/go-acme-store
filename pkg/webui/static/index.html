@@ -56,6 +56,15 @@
                     <i class="fi fi-rr-settings-sliders"></i>
                     <span>View Config</span>
                 </button>
+                <button class="action-btn btn-warning" onclick="exportKeystore()">
+                    <i class="fi fi-rr-download"></i>
+                    <span>Export Keystore</span>
+                </button>
+                <button class="action-btn btn-danger" onclick="document.getElementById('importFileInput').click()">
+                    <i class="fi fi-rr-upload"></i>
+                    <span>Import Keystore</span>
+                </button>
+                <input type="file" id="importFileInput" accept=".json" style="display: none" onchange="importKeystore(event)">
             </div>
             <div class="status-info">
                 <div id="autoRefreshIndicator" class="auto-refresh-indicator" style="display: none;">
@@ -183,6 +192,15 @@
                         <span>Sensitive values (tokens, passwords) are not displayed for security reasons.</span>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Import/Export Result Modal -->
+        <div id="importExportModal" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="closeImportExportModal()">&times;</span>
+                <h2 id="importExportTitle">Keystore Operation</h2>
+                <div id="importExportBody"></div>
             </div>
         </div>
 

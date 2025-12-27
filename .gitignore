@@ -39,7 +39,7 @@ certs/
 testdata/certs/
 testdata/lab*
 testdata/config/lab*
-
+testdata/keystore
 
 # Distribution / packaging
 dist/

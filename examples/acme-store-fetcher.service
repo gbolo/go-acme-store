@@ -1,0 +1,33 @@
+[Unit]
+Description=ACME Store Certificate Fetcher Daemon
+Documentation=https://github.com/yourusername/go-acme-store
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+
+# Path to the fetcher binary
+ExecStart=/usr/local/bin/acme-store-fetcher -config /etc/acme-store/config.yml -daemon
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/etc/tls/acme-certs /etc/traefik/certs
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=acme-store-fetcher
+
+[Install]
+WantedBy=multi-user.target
+

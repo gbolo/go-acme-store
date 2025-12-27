@@ -1,0 +1,42 @@
+# Example configuration using filesystem backend
+# This configuration uses local filesystem storage instead of Vault
+
+log:
+  level: INFO
+
+server:
+  bind_address: 0.0.0.0
+  bind_port: 15872
+
+acme:
+  # Use Let's Encrypt staging for testing
+  directory: "https://acme-staging-v02.api.letsencrypt.org/directory"
+  # directory: "https://acme-v02.api.letsencrypt.org/directory" # Production
+  
+  account_email: admin@example.com
+  
+  # DNS provider configuration (choose one)
+  dns_provider: digitalocean
+  dns_server: 8.8.8.8:53
+  
+  # Set via environment variable: ACMESTORE_ACME_DIGITALOCEAN_TOKEN
+  # digitalocean_token: dop_xxx
+
+# Keystore backend configuration
+keystore:
+  backend: filesystem
+
+# Filesystem backend settings
+filesystem:
+  # Directory where certificates, keys, and account data will be stored
+  # Ensure this directory exists and has appropriate permissions (0700)
+  base_path: /var/lib/acme-store
+
+# Note: The filesystem backend will create the following structure:
+#   /var/lib/acme-store/
+#   ├── account.json              # ACME account information
+#   ├── managed-domains.json      # List of managed domains
+#   └── domains/                  # Certificate files
+#       ├── example.com.json
+#       └── test.com.json
+

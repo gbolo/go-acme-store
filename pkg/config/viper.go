@@ -49,7 +49,7 @@ func MustInitViperAndLogger(appName, cfgFile string) {
 
 	// at this point our logger is ready, so we can start printing nice log messages! ;)
 	if viper.ConfigFileUsed() == "" {
-		log.Infof("not using a config file")
+		log.Warnf("not using a config file")
 	} else {
 		log.Infof("using config file: %s", viper.ConfigFileUsed())
 	}

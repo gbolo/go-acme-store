@@ -285,7 +285,7 @@ func (v *VaultKeystore) AddManagedDomainWithSANs(domain string, sans []string) e
 		return fmt.Errorf("failed to store managed domains: %v", err)
 	}
 
-	if sans != nil && len(sans) > 0 {
+	if len(sans) > 0 {
 		log.Infof("added managed domain: %s with SANs: %v", domain, sans)
 	} else {
 		log.Infof("added managed domain: %s", domain)

@@ -36,6 +36,7 @@ func main() {
 	viper.SetDefault("acme.directory", "https://acme-staging-v02.api.letsencrypt.org/directory")
 	viper.SetDefault("acme.account_email", "acme-store@devnull")
 	viper.SetDefault("vault.tls_skip_verify", false)
+	viper.SetDefault("keystore.backend", "vault")
 	config.MustInitViperAndLogger(appName, cfg)
 
 	// ensure we have the required config values
@@ -43,9 +44,25 @@ func main() {
 	// these values cannot be empty
 	keysThatCannotBeEmpty := []string{
 		"acme.dns_provider",
-		"vault.address",
-		"vault.kv2_mount",
-		"vault.kv2_secret_path",
+	}
+
+	// Add backend-specific required keys
+	backend := viper.GetString("keystore.backend")
+	switch backend {
+	case "vault":
+		keysThatCannotBeEmpty = append(keysThatCannotBeEmpty,
+			"vault.address",
+			"vault.kv2_mount",
+			"vault.kv2_secret_path",
+		)
+	case "filesystem":
+		keysThatCannotBeEmpty = append(keysThatCannotBeEmpty,
+			"filesystem.base_path",
+		)
+	case "memory":
+		// Memory backend has no required config
+	default:
+		log.Fatalf("unsupported keystore backend: %s (supported: vault, filesystem, memory)", backend)
 	}
 
 	for _, key := range keysThatCannotBeEmpty {

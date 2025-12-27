@@ -6,7 +6,7 @@ Automated certificate management with ACME protocol support, secure storage, and
 
 ACME Certificate Store automates the entire lifecycle of TLS certificates:
 - Obtains certificates from ACME providers (Let's Encrypt, etc.) using DNS-01 challenge.
-- Stores certificates and keys securely in HashiCorp Vault
+- Stores certificates and keys securely (Vault, Filesystem, or Memory)
 - Monitors expiration and automatically renews certificates
 - Provides a web UI and REST API for management
 - Includes a fetcher tool for deploying certificates and keys to other systems
@@ -87,7 +87,43 @@ Environment variables:
 - `ACMESTORE_ACME_POWERDNS_SERVER_ID`
 - `ACMESTORE_ACME_ACMEDNS_SERVER_URL`
 
-#### Vault
+#### Keystore Backend
+
+The keystore backend determines where certificates and keys are stored. Three backends are supported:
+
+```yaml
+keystore:
+  backend: vault  # Options: vault, filesystem, memory
+```
+
+**Vault** (default): Production-ready, secure storage in HashiCorp Vault
+- Best for: Production deployments, multi-instance setups, HA requirements
+- Requires: Running Vault instance with KV v2 secrets engine
+
+**Filesystem**: Simple file-based storage
+- Best for: Single-node deployments, development, testing
+- Requires: Persistent storage volume
+- Data stored in: `<base_path>/account.json`, `<base_path>/domains/*.json`, `<base_path>/managed-domains.json`
+
+```yaml
+keystore:
+  backend: filesystem
+
+filesystem:
+  base_path: /var/lib/acme-store  # Directory for storing certificates and keys
+```
+
+**Memory**: In-memory storage (ephemeral)
+- Best for: Testing only - all data lost on restart
+- Requires: No external dependencies
+
+Environment variable:
+- `ACMESTORE_KEYSTORE_BACKEND`
+- `ACMESTORE_FILESYSTEM_BASE_PATH`
+
+#### Vault Backend Configuration
+
+Required only when using `keystore.backend: vault`
 ```yaml
 vault:
   address: http://vault:8200
@@ -124,6 +160,9 @@ curl http://localhost:15872/api/healthz
 
 # List certificates
 curl http://localhost:15872/api/certs
+
+# Get private key for a domain
+curl http://localhost:15872/api/certs/example.com/private-key
 
 # Add domain
 curl -X POST http://localhost:15872/api/domains \
@@ -183,9 +222,9 @@ docker run -d \
   acme-store:latest
 ```
 
-## Vault Setup
+## Vault Backend Setup
 
-The application requires Vault with KV v2 secrets engine:
+If using the Vault backend (`keystore.backend: vault`), you need Vault with KV v2 secrets engine:
 
 ```bash
 # Enable KV v2
@@ -195,17 +234,36 @@ vault secrets enable -version=2 -path=kv kv
 vault secrets list
 ```
 
-Vault will store:
+The keystore will store:
 - ACME account key and registration
 - Domain list (managed domains)
 - Certificates and private keys
 
+## Filesystem Backend Setup
+
+If using the Filesystem backend (`keystore.backend: filesystem`), ensure the base path directory exists and has appropriate permissions:
+
+```bash
+# Create directory
+sudo mkdir -p /var/lib/acme-store
+
+# Set permissions (adjust user as needed)
+sudo chown acme-store:acme-store /var/lib/acme-store
+sudo chmod 700 /var/lib/acme-store
+```
+
+The filesystem keystore will create:
+- `account.json` - ACME account information
+- `managed-domains.json` - List of managed domains
+- `domains/` - Directory containing certificate files (one JSON file per domain)
+
 
 ## acme-store-fetcher (Optional Companion CLI)
-- Fetches certificates from Vault
+- Fetches certificates from the acme-store API
 - Deploys to local filesystem
 - Generates Traefik dynamic configuration
 - Runs as a cron job or one-shot command
+- No direct keystore access required
 
 See [FETCHER.md](FETCHER.md) for fetcher documentation.
 ## License

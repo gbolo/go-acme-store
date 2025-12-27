@@ -2,7 +2,7 @@
 
 ## Overview
 
-`acme-store-fetcher` is a CLI tool that fetches certificates from the ACME store (Vault backend) and saves them to disk as PEM files.
+`acme-store-fetcher` is a CLI tool that fetches certificates from the ACME store API and saves them to disk as PEM files.
 
 ## Purpose
 
@@ -14,12 +14,15 @@ This tool is useful for:
 
 ## Features
 
-- ✅ Fetches all managed domains from Vault
+- ✅ Fetches all managed domains from acme-store API
 - ✅ Saves full certificate chain (leaf + intermediates) to disk
 - ✅ Saves private keys with secure permissions (0600)
 - ✅ Skips invalid/pending/failed certificates automatically
 - ✅ Handles wildcard domains (replaces `*` with `_wild_`)
 - ✅ Configurable output directory
+- ✅ No direct keystore access required (uses API)
+- ✅ **Daemon mode** - continuously monitor and update certificates
+- ✅ Graceful shutdown on SIGTERM/SIGINT
 - ✅ Detailed logging and summary report
 - ✅ Exit code indicates success/failure
 
@@ -44,8 +47,11 @@ sudo chmod +x /usr/local/bin/acme-store-fetcher
 ### Basic Usage
 
 ```bash
-# Fetch all certificates to ./certs directory
+# Fetch all certificates once (one-shot mode)
 ./acme-store-fetcher
+
+# Run as daemon, continuously checking for updates
+./acme-store-fetcher -daemon
 
 # Specify config file
 ./acme-store-fetcher -config /etc/acme-store/config.yml
@@ -53,8 +59,10 @@ sudo chmod +x /usr/local/bin/acme-store-fetcher
 # Specify output directory (via flag)
 ./acme-store-fetcher -output-dir /etc/tls/acme-certs
 
-# Specify output directory (via config file)
-# Add to config.yml: fetcher.output_dir: "/etc/tls/acme-certs"
+# Run as daemon with custom check interval (via config)
+# Add to config.yml:
+#   fetcher.daemon: true
+#   fetcher.check_interval: 10m
 ./acme-store-fetcher -config /etc/acme-store/config.yml
 
 # Generate Traefik config (via flag)
@@ -62,11 +70,11 @@ sudo chmod +x /usr/local/bin/acme-store-fetcher
   -output-dir /etc/traefik/certs \
   -traefik-config /etc/traefik/dynamic/acme-certs.yml
 
-# Generate Traefik config (via config file)
-# Add to config.yml:
-#   fetcher.output_dir: "/etc/traefik/certs"
-#   fetcher.traefik_config: "/etc/traefik/dynamic/acme-certs.yml"
-./acme-store-fetcher -config /etc/acme-store/config.yml
+# Run as daemon with Traefik config generation
+./acme-store-fetcher \
+  -daemon \
+  -output-dir /etc/traefik/certs \
+  -traefik-config /etc/traefik/dynamic/acme-certs.yml
 ```
 
 ### Command-Line Flags
@@ -76,8 +84,11 @@ sudo chmod +x /usr/local/bin/acme-store-fetcher
 | `-config` | `./config.yml` | Path to configuration file | `CONFIG_FILE` env var |
 | `-output-dir` | `./certs` | Directory to save certificate files | `fetcher.output_dir` |
 | `-traefik-config` | _(none)_ | Path to write Traefik configuration file | `fetcher.traefik_config` |
+| `-daemon` | `false` | Run as daemon, continuously checking for updates | `fetcher.daemon` |
 
 **Precedence**: Command-line flag > Config file > Default value
+
+**Note**: When running in daemon mode, the check interval is controlled by `fetcher.check_interval` in the config file (default: 5 minutes).
 
 ### Configuration File
 
@@ -85,10 +96,16 @@ You can set fetcher options in `config.yml`:
 
 ```yaml
 fetcher:
+  # URL of the acme-store API (required)
+  api_url: "http://127.0.0.1:15872/api"
   # Directory to save certificate files
   output_dir: "/etc/tls/acme-certs"
   # Path to write Traefik configuration file (optional)
   traefik_config: "/etc/traefik/dynamic/acme-certs.yml"
+  # Run as daemon (default: false)
+  daemon: true
+  # Check interval when running in daemon mode (default: 5m)
+  check_interval: 10m
 ```
 
 **Note**: Command-line flags override config file values.
@@ -96,8 +113,9 @@ fetcher:
 ### Environment Variables
 
 - `CONFIG_FILE` - Alternative way to specify config file path
-- `VAULT_TOKEN` - Vault authentication token (recommended instead of config file)
-- `DIGITALOCEAN_TOKEN` - DigitalOcean API token (not needed by fetcher)
+- `ACMESTORE_FETCHER_API_URL` - Alternative way to specify API URL
+- `ACMESTORE_FETCHER_DAEMON` - Alternative way to enable daemon mode
+- `ACMESTORE_FETCHER_CHECK_INTERVAL` - Alternative way to set check interval
 
 ## Output Files
 
@@ -127,28 +145,20 @@ Wildcard domains have `*` replaced with `_wild_` in filenames:
 
 ## Examples
 
-### Example 1: Basic Fetch
+### Example 1: Basic Fetch (One-Shot)
 
 ```bash
 $ ./acme-store-fetcher
-2025-12-12T14:30:00.000-0500 INFO acme-store-fetcher/main.go:42 initialized vault keystore at http://127.0.0.1:8200
-2025-12-12T14:30:00.100-0500 INFO acme-store-fetcher/main.go:50 output directory: ./certs
-2025-12-12T14:30:00.200-0500 INFO acme-store-fetcher/main.go:58 found 3 managed domain(s)
-2025-12-12T14:30:00.300-0500 INFO acme-store-fetcher/main.go:67 processing domain: example.com
-2025-12-12T14:30:00.400-0500 INFO acme-store-fetcher/main.go:115 saved certificate for example.com:
-2025-12-12T14:30:00.400-0500 INFO acme-store-fetcher/main.go:116   - cert chain: ./certs/example.com_cert-chain.pem
-2025-12-12T14:30:00.400-0500 INFO acme-store-fetcher/main.go:117   - private key: ./certs/example.com_key.pem
-2025-12-12T14:30:00.500-0500 INFO acme-store-fetcher/main.go:67 processing domain: *.example.com
-2025-12-12T14:30:00.600-0500 INFO acme-store-fetcher/main.go:115 saved certificate for *.example.com:
-2025-12-12T14:30:00.600-0500 INFO acme-store-fetcher/main.go:116   - cert chain: ./certs/_wild_.example.com_cert-chain.pem
-2025-12-12T14:30:00.600-0500 INFO acme-store-fetcher/main.go:117   - private key: ./certs/_wild_.example.com_key.pem
-2025-12-12T14:30:00.700-0500 INFO acme-store-fetcher/main.go:122 ========================================
-2025-12-12T14:30:00.700-0500 INFO acme-store-fetcher/main.go:123 Summary:
-2025-12-12T14:30:00.700-0500 INFO acme-store-fetcher/main.go:124   Total domains: 3
-2025-12-12T14:30:00.700-0500 INFO acme-store-fetcher/main.go:125   Successfully saved: 2
-2025-12-12T14:30:00.700-0500 INFO acme-store-fetcher/main.go:126   Skipped: 1
-2025-12-12T14:30:00.700-0500 INFO acme-store-fetcher/main.go:127   Errors: 0
-2025-12-12T14:30:00.700-0500 INFO acme-store-fetcher/main.go:128 ========================================
+2025-12-27T11:02:39.743-0500 INFO config/viper.go:54 using config file: config.yml
+2025-12-27T11:02:39.743-0500 INFO config/viper.go:64 initializing app: acme-store-fetcher v:devel(ref-unknown), platform: go1.25.5 [linux/amd64]
+2025-12-27T11:02:39.744-0500 INFO acme-store-fetcher/main.go:87 connected to acme-store API at http://127.0.0.1:15872/api
+2025-12-27T11:02:39.744-0500 INFO acme-store-fetcher/main.go:94 output directory: ./certs
+2025-12-27T11:02:39.745-0500 INFO acme-store-fetcher/main.go:153 found 3 managed domain(s)
+2025-12-27T11:02:39.745-0500 INFO acme-store-fetcher/main.go:166 processing domain: example.com
+2025-12-27T11:02:39.747-0500 INFO acme-store-fetcher/main.go:233 saved certificate for domain=example.com cert=certs/example.com_cert-chain.pem key=certs/example.com_key.pem
+2025-12-27T11:02:39.747-0500 INFO acme-store-fetcher/main.go:166 processing domain: *.example.com
+2025-12-27T11:02:39.748-0500 INFO acme-store-fetcher/main.go:233 saved certificate for domain=*.example.com cert=certs/_wild_.example.com_cert-chain.pem key=certs/_wild_.example.com_key.pem
+2025-12-27T11:02:39.749-0500 INFO acme-store-fetcher/main.go:253 fetch complete: total=3 saved=2 skipped=1 errors=0
 ```
 
 ### Example 2: Custom Output Directory
@@ -159,7 +169,38 @@ $ ./acme-store-fetcher -output-dir /etc/tls/acme-certs
 ...
 ```
 
-### Example 3: Directory Structure
+### Example 3: Daemon Mode
+
+```bash
+$ ./acme-store-fetcher -daemon
+2025-12-27T11:03:10.459-0500 INFO config/viper.go:54 using config file: config.yml
+2025-12-27T11:03:10.459-0500 INFO config/viper.go:64 initializing app: acme-store-fetcher v:devel(ref-unknown), platform: go1.25.5 [linux/amd64]
+2025-12-27T11:03:10.460-0500 INFO acme-store-fetcher/main.go:87 connected to acme-store API at http://127.0.0.1:15872/api
+2025-12-27T11:03:10.460-0500 INFO acme-store-fetcher/main.go:94 output directory: ./certs
+2025-12-27T11:03:10.460-0500 INFO acme-store-fetcher/main.go:98 running in daemon mode, checking every 5m0s
+2025-12-27T11:03:10.460-0500 INFO acme-store-fetcher/main.go:119 performing initial certificate fetch
+2025-12-27T11:03:10.461-0500 INFO acme-store-fetcher/main.go:153 found 1 managed domain(s)
+2025-12-27T11:03:10.461-0500 INFO acme-store-fetcher/main.go:166 processing domain: test.linuxctl.com
+2025-12-27T11:03:10.464-0500 INFO acme-store-fetcher/main.go:233 saved certificate for domain=test.linuxctl.com cert=certs/test.linuxctl.com_cert-chain.pem key=certs/test.linuxctl.com_key.pem
+2025-12-27T11:03:10.465-0500 INFO acme-store-fetcher/main.go:253 fetch complete: total=1 saved=1 skipped=0 errors=0
+2025-12-27T11:03:10.465-0500 INFO acme-store-fetcher/main.go:126 daemon started, will check for updates every 5m0s
+2025-12-27T11:03:10.465-0500 INFO acme-store-fetcher/main.go:127 press Ctrl+C to stop gracefully
+# ... waits 5 minutes ...
+2025-12-27T11:08:10.465-0500 INFO acme-store-fetcher/main.go:138 checking for certificate updates
+2025-12-27T11:08:10.466-0500 INFO acme-store-fetcher/main.go:153 found 1 managed domain(s)
+2025-12-27T11:08:10.467-0500 INFO acme-store-fetcher/main.go:253 fetch complete: total=1 saved=1 skipped=0 errors=0
+```
+
+### Example 4: Graceful Shutdown
+
+```bash
+$ ./acme-store-fetcher -daemon
+# ... running ...
+^C
+2025-12-27T10:58:54.196-0500 INFO acme-store-fetcher/main.go:135 received signal terminated, shutting down gracefully
+```
+
+### Example 5: Directory Structure
 
 ```bash
 $ tree ./certs
@@ -226,16 +267,79 @@ frontend https_frontend
     # Note: HAProxy needs cert+key in single file, see automation example below
 ```
 
+## Daemon Mode vs One-Shot Mode
+
+The fetcher can run in two modes:
+
+### One-Shot Mode (Default)
+- Fetches certificates once and exits
+- Suitable for cron jobs or manual runs
+- Exit code indicates success/failure
+
+### Daemon Mode (New!)
+- Runs continuously in the background
+- Periodically checks for certificate updates
+- Automatically writes updated certificates to disk
+- Graceful shutdown on SIGTERM/SIGINT
+- Suitable for systemd services or Docker containers
+
+**When to use daemon mode:**
+- Production deployments where certificates update frequently
+- Kubernetes/Docker environments
+- Systems where you want real-time certificate updates
+- Environments where you want to minimize external scheduling
+
+**When to use one-shot mode:**
+- Simple cron-based automation
+- Environments with existing job schedulers
+- When you want explicit control over execution timing
+
 ## Automation
 
-### Cron Job (Every 6 Hours)
+### Option 1: Daemon Mode with Systemd (Recommended)
+
+**Service file** (`/etc/systemd/system/acme-store-fetcher.service`):
+```ini
+[Unit]
+Description=ACME Store Certificate Fetcher Daemon
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/acme-store-fetcher -config /etc/acme-store/config.yml -daemon
+Restart=always
+RestartSec=10
+User=root
+
+# Reload nginx when certificates are updated
+# Note: The daemon continuously updates certs, nginx needs periodic reloads
+ExecStartPost=/bin/sh -c 'while true; do sleep 3600; systemctl reload nginx; done' &
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+```bash
+sudo systemctl enable acme-store-fetcher.service
+sudo systemctl start acme-store-fetcher.service
+sudo systemctl status acme-store-fetcher.service
+```
+
+View logs:
+```bash
+sudo journalctl -u acme-store-fetcher -f
+```
+
+### Option 2: Cron Job (One-Shot Mode)
 
 ```bash
 # /etc/cron.d/acme-store-fetcher
 0 */6 * * * root /usr/local/bin/acme-store-fetcher -config /etc/acme-store/config.yml -output-dir /etc/ssl/acme-certs && systemctl reload nginx
 ```
 
-### Systemd Timer
+### Option 3: Systemd Timer (One-Shot Mode)
 
 **Service file** (`/etc/systemd/system/acme-store-fetcher.service`):
 ```ini
@@ -267,6 +371,62 @@ Enable and start:
 ```bash
 sudo systemctl enable acme-store-fetcher.timer
 sudo systemctl start acme-store-fetcher.timer
+sudo systemctl status acme-store-fetcher.timer
+```
+
+### Docker/Kubernetes Deployment (Daemon Mode)
+
+**Dockerfile:**
+```dockerfile
+FROM alpine:latest
+
+# Install ca-certificates for HTTPS
+RUN apk --no-cache add ca-certificates
+
+# Copy binary
+COPY acme-store-fetcher /usr/local/bin/
+
+# Copy config
+COPY config.yml /etc/acme-store/config.yml
+
+# Run as daemon
+CMD ["/usr/local/bin/acme-store-fetcher", "-config", "/etc/acme-store/config.yml", "-daemon"]
+```
+
+**Kubernetes Deployment:**
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: acme-store-fetcher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: acme-store-fetcher
+  template:
+    metadata:
+      labels:
+        app: acme-store-fetcher
+    spec:
+      containers:
+      - name: fetcher
+        image: acme-store-fetcher:latest
+        args:
+        - "-daemon"
+        - "-config"
+        - "/etc/acme-store/config.yml"
+        volumeMounts:
+        - name: certs
+          mountPath: /etc/tls/acme-certs
+        - name: config
+          mountPath: /etc/acme-store
+      volumes:
+      - name: certs
+        emptyDir: {}
+      - name: config
+        configMap:
+          name: acme-store-fetcher-config
 ```
 
 ### Ansible Playbook
@@ -369,10 +529,10 @@ systemctl reload haproxy
 ### No certificates fetched
 
 **Check:**
-1. Are there managed domains? `curl http://127.0.0.1:15872/api/domains`
-2. Do they have valid certificates? `curl http://127.0.0.1:15872/api/certs`
-3. Is Vault accessible from this host?
-4. Are Vault credentials correct in config?
+1. Is the acme-store API accessible? `curl http://127.0.0.1:15872/api/healthz`
+2. Are there managed domains? `curl http://127.0.0.1:15872/api/domains`
+3. Do they have valid certificates? `curl http://127.0.0.1:15872/api/certs`
+4. Is the API URL correct in config? `fetcher.api_url`
 
 ### Permission denied writing files
 
@@ -383,12 +543,13 @@ sudo mkdir -p /etc/tls/acme-certs
 sudo chown $USER:$USER /etc/tls/acme-certs
 ```
 
-### Vault connection failed
+### API connection failed
 
 **Check:**
-1. Vault address in config: `vault.address`
-2. Vault token: `vault.token` or `VAULT_TOKEN` env var
-3. Network connectivity: `curl http://127.0.0.1:8200/v1/sys/health`
+1. API URL in config: `fetcher.api_url`
+2. Is acme-store daemon running?
+3. Network connectivity: `curl http://127.0.0.1:15872/api/healthz`
+4. Firewall rules allowing access to API port
 
 ### Certificate data empty
 
@@ -400,6 +561,34 @@ sudo chown $USER:$USER /etc/tls/acme-certs
 **Check status:**
 ```bash
 curl http://127.0.0.1:15872/api/certs | jq '.[] | {domain: .common_name, status: .status}'
+```
+
+### Daemon mode not updating certificates
+
+**Check:**
+1. Is the daemon actually running? `ps aux | grep acme-store-fetcher`
+2. Check the logs for errors
+3. Verify check interval: look for "checking for certificate updates" in logs
+4. Ensure API is accessible: `curl http://127.0.0.1:15872/api/healthz`
+
+**Systemd service:**
+```bash
+sudo systemctl status acme-store-fetcher
+sudo journalctl -u acme-store-fetcher -f
+```
+
+### Daemon exits unexpectedly
+
+**Check:**
+1. Review logs for error messages
+2. Ensure API URL is correct and accessible
+3. Check file permissions on output directory
+4. Verify systemd service configuration (Restart=always)
+
+**Debug mode:**
+```bash
+# Run in foreground to see all output
+./acme-store-fetcher -daemon -config /etc/acme-store/config.yml
 ```
 
 ## Security Considerations
@@ -424,12 +613,12 @@ mkdir -p ~/certs
 chmod 700 ~/certs
 ```
 
-### Vault Token
+### API Access
 
-Never commit Vault tokens to version control. Use:
-- Environment variable: `VAULT_TOKEN`
-- Config file with restricted permissions: `chmod 600 config.yml`
-- Vault agent for automatic token management
+The fetcher connects to the acme-store API without authentication. Ensure:
+- The API is only accessible from trusted networks
+- Use firewall rules to restrict API access
+- Consider adding authentication if exposing the API externally
 
 ## Comparison with acme-store
 
@@ -441,11 +630,12 @@ Never commit Vault tokens to version control. Use:
 | Certificate renewal | ✅ Yes | ❌ No (read-only) |
 | Export to files | ❌ No | ✅ Yes |
 | Web UI | ✅ Yes | ❌ No |
-| API | ✅ Yes | ❌ No |
+| API | ✅ Provides API | ✅ Consumes API |
+| Keystore access | ✅ Direct | ❌ Via API only |
 
 **Typical workflow:**
 1. `acme-store` runs as daemon, obtains and renews certificates
-2. `acme-store-fetcher` runs periodically to export certificates to disk
+2. `acme-store-fetcher` runs periodically to fetch certificates via API and export to disk
 3. Web server (nginx, Apache, etc.) uses the exported files
 
 ## Advanced Usage

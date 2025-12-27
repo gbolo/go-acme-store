@@ -6,6 +6,9 @@ log:
 
 # Fetcher configuration
 fetcher:
+  # URL of the acme-store API (required)
+  api_url: "http://127.0.0.1:15872/api"
+  
   # Directory where certificate files will be saved
   # Default: ./certs
   output_dir: "/etc/tls/acme-certs"
@@ -13,15 +16,15 @@ fetcher:
   # Optional: Generate Traefik configuration file
   # Uncomment to enable Traefik config generation
   traefik_config: "/etc/traefik/dynamic/acme-certs.yml"
-
-# Vault configuration (required)
-vault:
-  address: "http://127.0.0.1:8200"
-  kv2_mount: kv
-  kv2_secret_path: platform/acme
-  tls_skip_verify: false
-  # Set via environment variable: VAULT_TOKEN=xxx
-
+  
+  # Run as daemon, continuously checking for certificate updates
+  # Default: false (run once and exit)
+  daemon: false
+  
+  # Check interval when running in daemon mode
+  # Default: 5m (5 minutes)
+  # Accepts: 1m, 5m, 10m, 1h, etc.
+  check_interval: 5m
 
 # Note: Command-line flags override these settings
 # Example:

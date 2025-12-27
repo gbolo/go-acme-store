@@ -16,6 +16,8 @@ All API endpoints are prefixed with `/api`.
 | GET | `/healthz` | Health check |
 | GET | `/config` | View non-sensitive configuration |
 | GET | `/certs` | List all certificates |
+| GET | `/certs/{domain}/private-key` | Get private key for a domain |
+| DELETE | `/certs/{domain}` | Delete a certificate |
 | GET | `/domains` | List managed domains |
 | POST | `/domains` | Add a domain |
 | DELETE | `/domains/{domain}` | Remove a domain |
@@ -180,6 +182,86 @@ curl http://127.0.0.1:15872/api/certs | jq '.[] | select(.managed == true)'
 
 # Get failed certificates
 curl http://127.0.0.1:15872/api/certs | jq '.[] | select(.status == "failed")'
+```
+
+---
+
+### GET /api/certs/{domain}/private-key
+
+Get the private key for a specific domain's certificate.
+
+**URL Parameters:**
+- `domain` (required) - The domain name
+
+**Response:**
+```json
+{
+  "domain": "example.com",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgk..."
+}
+```
+
+**Status Codes:**
+- `200` - Success
+- `404` - Certificate not found for domain
+- `500` - Failed to retrieve certificate
+- `503` - Keystore unavailable
+
+**Security Note:**
+This endpoint returns sensitive private key material. Ensure proper access controls are in place.
+
+**Example:**
+```bash
+# Get private key for a domain
+curl http://127.0.0.1:15872/api/certs/example.com/private-key | jq
+
+# Save private key to file
+curl -s http://127.0.0.1:15872/api/certs/example.com/private-key | \
+  jq -r '.private_key' > example.com.key
+
+# Set proper permissions
+chmod 600 example.com.key
+```
+
+---
+
+### DELETE /api/certs/{domain}
+
+Delete a certificate for a specific domain.
+
+**URL Parameters:**
+- `domain` (required) - The domain name
+
+**Response (Success):**
+```json
+{
+  "message": "certificate for domain example.com deleted successfully",
+  "domain": "example.com"
+}
+```
+
+**Status Codes:**
+- `200` - Certificate deleted successfully
+- `400` - Cannot delete managed certificate (must unmanage first)
+- `404` - Certificate not found
+- `500` - Failed to delete certificate
+- `503` - Keystore unavailable
+
+**Important:**
+- You cannot delete a managed certificate directly
+- First remove it from managed domains using `DELETE /api/domains/{domain}`
+- Then you can delete the certificate
+
+**Example:**
+```bash
+# Try to delete a managed certificate (will fail)
+curl -X DELETE http://127.0.0.1:15872/api/certs/example.com
+
+# Unmanage the domain first
+curl -X DELETE http://127.0.0.1:15872/api/domains/example.com
+
+# Now delete the certificate
+curl -X DELETE http://127.0.0.1:15872/api/certs/example.com
 ```
 
 ---

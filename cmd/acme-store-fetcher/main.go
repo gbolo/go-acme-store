@@ -162,6 +162,13 @@ func performFetch(apiURL, outputDir, traefikConfig string) int {
 		return 0
 	}
 
+	// Fetch all certificates once (optimization: avoid calling /api/certs multiple times)
+	certInfoMap, err := getAllCerts(apiURL)
+	if err != nil {
+		log.Errorf("failed to get certificates: %v", err)
+		return 1
+	}
+
 	// Process each domain
 	successCount := 0
 	skipCount := 0
@@ -170,10 +177,10 @@ func performFetch(apiURL, outputDir, traefikConfig string) int {
 	for _, domain := range managedDomains {
 		log.Infof("processing domain: %s", domain)
 
-		// Fetch certificate info from API
-		certInfo, err := getCertInfo(apiURL, domain)
-		if err != nil {
-			log.Errorf("failed to get certificate info for %s: %v", domain, err)
+		// Lookup certificate info from map
+		certInfo, found := certInfoMap[domain]
+		if !found {
+			log.Errorf("certificate not found for %s", domain)
 			errorCount++
 			continue
 		}
@@ -268,7 +275,7 @@ func performFetch(apiURL, outputDir, traefikConfig string) int {
 
 	// Generate Traefik configuration if requested
 	if traefikConfig != "" && successCount > 0 {
-		if err := generateTraefikConfig(traefikConfig, outputDir, managedDomains, apiURL); err != nil {
+		if err := generateTraefikConfig(traefikConfig, outputDir, managedDomains, certInfoMap); err != nil {
 			log.Errorf("failed to generate Traefik config: %v", err)
 			errorCount++
 		} else {
@@ -480,12 +487,12 @@ func getManagedDomains(apiURL string) ([]string, error) {
 	return result.Domains, nil
 }
 
-func getCertInfo(apiURL, domain string) (*apiCertInfo, error) {
+func getAllCerts(apiURL string) (map[string]apiCertInfo, error) {
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 	}
 
-	// Get all certs and find the one for this domain
+	// Get all certs
 	resp, err := client.Get(fmt.Sprintf("%s/certs", apiURL))
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
@@ -502,14 +509,15 @@ func getCertInfo(apiURL, domain string) (*apiCertInfo, error) {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	// Find cert for this domain
+	// Build map of domain -> certInfo
+	certMap := make(map[string]apiCertInfo)
 	for _, cert := range certs {
-		if cert.CommonName == domain {
-			return &cert, nil
+		if cert.CommonName != "" {
+			certMap[cert.CommonName] = cert
 		}
 	}
 
-	return nil, fmt.Errorf("certificate not found for domain %s", domain)
+	return certMap, nil
 }
 
 func getPrivateKey(apiURL, domain string) (string, error) {
@@ -558,14 +566,14 @@ type traefikConfig struct {
 	TLS traefikTLS `yaml:"tls"`
 }
 
-func generateTraefikConfig(configPath string, certDir string, domains []string, apiURL string) error {
+func generateTraefikConfig(configPath string, certDir string, domains []string, certInfoMap map[string]apiCertInfo) error {
 	var certificates []traefikCertificate
 
 	// Build certificate list
 	for _, domain := range domains {
 		// Check if certificate exists and is valid
-		certInfo, err := getCertInfo(apiURL, domain)
-		if err != nil || !certInfo.Managed || certInfo.Status != "issued" && certInfo.Status != "" {
+		certInfo, found := certInfoMap[domain]
+		if !found || !certInfo.Managed || certInfo.Status != "issued" && certInfo.Status != "" {
 			continue
 		}
 

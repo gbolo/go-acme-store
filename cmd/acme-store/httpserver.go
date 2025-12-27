@@ -25,6 +25,7 @@ func httpServerDaemon(appName string) {
 	api.Get("/healthz", handlerHealthCheck)
 	api.Get("/config", handlerConfig)
 	api.Get("/certs", handlerCerts)
+	api.Get("/certs/:domain/private-key", handlerGetPrivateKey)
 	api.Delete("/certs/:domain", handlerDeleteCert)
 
 	// Domain management API
@@ -64,24 +65,24 @@ func handlerVersion(c *fiber.Ctx) (err error) {
 
 func handlerHealthCheck(c *fiber.Ctx) (err error) {
 	health := &fiber.Map{
-		"status": "healthy",
-		"vault": &fiber.Map{
+		"status":   "healthy",
+		"keystore": &fiber.Map{
 			"connected": false,
 			"status":    "unavailable",
 		},
 	}
 
-	// Check vault connectivity
+	// Check keystore connectivity
 	if err := ensureKeystore(); err == nil {
-		// Vault is connected, try a simple operation to verify it's working
+		// Keystore is connected, try a simple operation to verify it's working
 		_, err := ks.GetManagedDomains()
 		if err == nil {
-			(*health)["vault"] = &fiber.Map{
+			(*health)["keystore"] = &fiber.Map{
 				"connected": true,
 				"status":    "healthy",
 			}
 		} else {
-			(*health)["vault"] = &fiber.Map{
+			(*health)["keystore"] = &fiber.Map{
 				"connected": true,
 				"status":    "error",
 				"error":     err.Error(),
@@ -89,7 +90,7 @@ func handlerHealthCheck(c *fiber.Ctx) (err error) {
 			(*health)["status"] = "degraded"
 		}
 	} else {
-		(*health)["vault"] = &fiber.Map{
+		(*health)["keystore"] = &fiber.Map{
 			"connected": false,
 			"status":    "unavailable",
 		}
@@ -121,13 +122,26 @@ func handlerConfig(c *fiber.Ctx) (err error) {
 			"dns_provider":  viper.GetString("acme.dns_provider"),
 			// NOTE: digitalocean_token is intentionally excluded (sensitive)
 		},
-		"vault": &fiber.Map{
+		"keystore": &fiber.Map{
+			"backend": viper.GetString("keystore.backend"),
+		},
+	}
+
+	// Add backend-specific config
+	backend := viper.GetString("keystore.backend")
+	switch backend {
+	case "vault":
+		(*config)["vault"] = &fiber.Map{
 			"address":         viper.GetString("vault.address"),
 			"kv2_mount":       viper.GetString("vault.kv2_mount"),
 			"kv2_secret_path": viper.GetString("vault.kv2_secret_path"),
 			"tls_skip_verify": viper.GetBool("vault.tls_skip_verify"),
 			// NOTE: token is intentionally excluded (sensitive)
-		},
+		}
+	case "filesystem":
+		(*config)["filesystem"] = &fiber.Map{
+			"base_path": viper.GetString("filesystem.base_path"),
+		}
 	}
 
 	return c.Status(200).JSON(config)
@@ -366,6 +380,44 @@ func handlerTriggerRenewal(c *fiber.Ctx) (err error) {
 
 	return c.Status(202).JSON(&fiber.Map{
 		"message": "certificate renewal triggered, check logs for progress",
+	})
+}
+
+func handlerGetPrivateKey(c *fiber.Ctx) (err error) {
+	if err := ensureKeystore(); err != nil {
+		return c.Status(503).JSON(&fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	domain := c.Params("domain")
+
+	if domain == "" {
+		return c.Status(400).JSON(&fiber.Map{
+			"error": "domain parameter is required",
+		})
+	}
+
+	// Get certificate and key data
+	certAndKey, err := ks.GetCertAndKey(domain)
+	if err != nil {
+		return c.Status(500).JSON(&fiber.Map{
+			"error": fmt.Sprintf("failed to retrieve certificate: %v", err),
+		})
+	}
+
+	// Check if certificate exists
+	if certAndKey.CommonName == "" {
+		return c.Status(404).JSON(&fiber.Map{
+			"error": fmt.Sprintf("certificate not found for domain %s", domain),
+		})
+	}
+
+	log.Infof("private key requested for domain %s via API", domain)
+
+	return c.Status(200).JSON(&fiber.Map{
+		"domain":      domain,
+		"private_key": certAndKey.PrivateKeyPEM,
 	})
 }
 

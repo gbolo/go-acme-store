@@ -3,6 +3,8 @@ package keystore
 import (
 	"fmt"
 	"go-acme-store/pkg/crypto"
+
+	"github.com/spf13/viper"
 )
 
 type Keystore interface {
@@ -73,4 +75,35 @@ func NewCertAndKey(certChain, privateKey, certURL string) (CertAndKey, error) {
 	}
 	err := data.populateMissingFields()
 	return data, err
+}
+
+// NewKeystoreFromViper creates a keystore based on the backend configuration
+// Supported backends: vault (default), filesystem, memory
+func NewKeystoreFromViper(accountEmail string, needsAcmeAccount bool) (Keystore, error) {
+	backend := viper.GetString("keystore.backend")
+	if backend == "" {
+		backend = "vault" // default to vault for backward compatibility
+	}
+
+	switch backend {
+	case "vault":
+		return NewVaultKeystoreFromViper(accountEmail, needsAcmeAccount)
+	case "filesystem":
+		return NewFilesystemKeystoreFromViper(accountEmail, needsAcmeAccount)
+	case "memory":
+		if !needsAcmeAccount {
+			return NewMemoryKeystore(AcmeAccount{}), nil
+		}
+		// Generate account key for memory keystore
+		accountKeyPEM, err := crypto.GenerateECKeyPEM()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate account key: %v", err)
+		}
+		return NewMemoryKeystore(AcmeAccount{
+			Email: accountEmail,
+			Key:   accountKeyPEM,
+		}), nil
+	default:
+		return nil, fmt.Errorf("unsupported keystore backend: %s (supported: vault, filesystem, memory)", backend)
+	}
 }

@@ -1,15 +1,21 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"go-acme-store/pkg/config"
-	"go-acme-store/pkg/keystore"
 	"go-acme-store/pkg/log"
 	"go-acme-store/pkg/meta"
+	"io"
+	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -22,6 +28,7 @@ func main() {
 	configFile := flag.String("config", "", "path to configuration file (default: ./config.yml or CONFIG_FILE env var)")
 	outputDir := flag.String("output-dir", "./certs", "directory to save certificate files")
 	traefikConfig := flag.String("traefik-config", "", "path to write Traefik configuration file (optional)")
+	daemon := flag.Bool("daemon", false, "run as daemon, continuously checking for certificate updates")
 	showVersion := flag.Bool("version", false, "display version information")
 	flag.Parse()
 
@@ -54,13 +61,30 @@ func main() {
 		finalTraefikConfig = viper.GetString("fetcher.traefik_config")
 	}
 
-	// Initialize keystore (fetcher doesn't need ACME account)
-	ks, err := keystore.NewVaultKeystoreFromViper("", false)
-	if err != nil {
-		log.Fatalf("failed to initialize vault keystore: %v", err)
+	// Determine daemon mode with precedence: flag > config > false
+	daemonMode := *daemon
+	if !daemonMode && viper.IsSet("fetcher.daemon") {
+		daemonMode = viper.GetBool("fetcher.daemon")
 	}
 
-	log.Infof("initialized vault keystore at %s", viper.GetString("vault.address"))
+	// Get check interval for daemon mode (default: 5 minutes)
+	checkInterval := viper.GetDuration("fetcher.check_interval")
+	if checkInterval == 0 {
+		checkInterval = 5 * time.Minute
+	}
+
+	// Get API URL
+	apiURL := viper.GetString("fetcher.api_url")
+	if apiURL == "" {
+		log.Fatalf("fetcher.api_url is required (e.g., http://127.0.0.1:15872/api)")
+	}
+
+	// Validate API URL by checking health endpoint
+	if err := checkAPIHealth(apiURL); err != nil {
+		log.Fatalf("failed to connect to acme-store API at %s: %v", apiURL, err)
+	}
+
+	log.Infof("connected to acme-store API at %s", apiURL)
 
 	// Ensure output directory exists
 	if err := os.MkdirAll(finalOutputDir, 0755); err != nil {
@@ -69,17 +93,68 @@ func main() {
 
 	log.Infof("output directory: %s", finalOutputDir)
 
-	// Fetch managed domains
-	managedDomains, err := ks.GetManagedDomains()
+	// Run in daemon mode if requested
+	if daemonMode {
+		log.Infof("running in daemon mode, checking every %v", checkInterval)
+		runDaemon(apiURL, finalOutputDir, finalTraefikConfig, checkInterval)
+		return
+	}
+
+	// Run single fetch
+	exitCode := performFetch(apiURL, finalOutputDir, finalTraefikConfig)
+	os.Exit(exitCode)
+}
+
+// runDaemon runs the fetcher in daemon mode
+func runDaemon(apiURL, outputDir, traefikConfig string, checkInterval time.Duration) {
+	// Setup signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	// Create context for cancellation
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Run initial fetch immediately
+	log.Infof("performing initial certificate fetch")
+	performFetch(apiURL, outputDir, traefikConfig)
+
+	// Start ticker for periodic checks
+	ticker := time.NewTicker(checkInterval)
+	defer ticker.Stop()
+
+	log.Infof("daemon started, will check for updates every %v", checkInterval)
+	log.Infof("press Ctrl+C to stop gracefully")
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Infof("context cancelled, shutting down")
+			return
+		case sig := <-sigChan:
+			log.Infof("received signal %v, shutting down gracefully", sig)
+			return
+		case <-ticker.C:
+			log.Infof("checking for certificate updates")
+			performFetch(apiURL, outputDir, traefikConfig)
+		}
+	}
+}
+
+// performFetch performs a single fetch operation and returns exit code
+func performFetch(apiURL, outputDir, traefikConfig string) int {
+	// Fetch managed domains from API
+	managedDomains, err := getManagedDomains(apiURL)
 	if err != nil {
-		log.Fatalf("failed to get managed domains: %v", err)
+		log.Errorf("failed to get managed domains: %v", err)
+		return 1
 	}
 
 	log.Infof("found %d managed domain(s)", len(managedDomains))
 
 	if len(managedDomains) == 0 {
 		log.Warnf("no managed domains found")
-		return
+		return 0
 	}
 
 	// Process each domain
@@ -90,45 +165,53 @@ func main() {
 	for _, domain := range managedDomains {
 		log.Infof("processing domain: %s", domain)
 
-		// Fetch certificate and key
-		certAndKey, err := ks.GetCertAndKey(domain)
+		// Fetch certificate info from API
+		certInfo, err := getCertInfo(apiURL, domain)
 		if err != nil {
-			log.Errorf("failed to get certificate for %s: %v", domain, err)
+			log.Errorf("failed to get certificate info for %s: %v", domain, err)
 			errorCount++
 			continue
 		}
 
 		// Skip if not managed (should not happen, but safety check)
-		if !certAndKey.Managed {
+		if !certInfo.Managed {
 			log.Warnf("skipping %s (marked as unmanaged)", domain)
 			skipCount++
 			continue
 		}
 
 		// Skip if status is not "issued"
-		if certAndKey.Status != "issued" && certAndKey.Status != "" {
-			log.Warnf("skipping %s (status: %s)", domain, certAndKey.Status)
+		if certInfo.Status != "issued" && certInfo.Status != "" {
+			log.Warnf("skipping %s (status: %s)", domain, certInfo.Status)
 			skipCount++
 			continue
 		}
 
 		// Skip if certificate data is empty
-		if certAndKey.LeafCertPEM == "" || certAndKey.PrivateKeyPEM == "" {
-			log.Warnf("skipping %s (certificate or key data is empty)", domain)
+		if certInfo.LeafCertPEM == "" {
+			log.Warnf("skipping %s (certificate data is empty)", domain)
 			skipCount++
+			continue
+		}
+
+		// Fetch private key from API
+		privateKey, err := getPrivateKey(apiURL, domain)
+		if err != nil {
+			log.Errorf("failed to get private key for %s: %v", domain, err)
+			errorCount++
 			continue
 		}
 
 		// Generate safe filename (replace * with _wild_)
 		safeDomain := strings.ReplaceAll(domain, "*", "_wild_")
 
-		certFilename := filepath.Join(finalOutputDir, fmt.Sprintf("%s_cert-chain.pem", safeDomain))
-		keyFilename := filepath.Join(finalOutputDir, fmt.Sprintf("%s_key.pem", safeDomain))
+		certFilename := filepath.Join(outputDir, fmt.Sprintf("%s_cert-chain.pem", safeDomain))
+		keyFilename := filepath.Join(outputDir, fmt.Sprintf("%s_key.pem", safeDomain))
 
 		// Build full chain (leaf + intermediates)
-		fullChain := certAndKey.LeafCertPEM
-		if certAndKey.CertChainPEM != "" {
-			fullChain = fullChain + "\n" + certAndKey.CertChainPEM
+		fullChain := certInfo.LeafCertPEM
+		if certInfo.CertChainPEM != "" {
+			fullChain = fullChain + "\n" + certInfo.CertChainPEM
 		}
 
 		// Write certificate chain
@@ -139,7 +222,7 @@ func main() {
 		}
 
 		// Write private key
-		if err := os.WriteFile(keyFilename, []byte(certAndKey.PrivateKeyPEM), 0600); err != nil {
+		if err := os.WriteFile(keyFilename, []byte(privateKey), 0600); err != nil {
 			log.Errorf("failed to write key file for %s: %v", domain, err)
 			errorCount++
 			// Try to clean up cert file if key write failed
@@ -147,39 +230,164 @@ func main() {
 			continue
 		}
 
-		log.Infof("saved certificate for %s:", domain)
-		log.Infof("  - cert chain: %s", certFilename)
-		log.Infof("  - private key: %s", keyFilename)
+		log.Infof("saved certificate for domain=%s cert=%s key=%s", domain, certFilename, keyFilename)
 		successCount++
 	}
 
 	// Generate Traefik configuration if requested
-	if finalTraefikConfig != "" && successCount > 0 {
-		log.Infof("generating Traefik configuration file: %s", finalTraefikConfig)
-
-		if err := generateTraefikConfig(finalTraefikConfig, finalOutputDir, managedDomains, ks); err != nil {
+	if traefikConfig != "" && successCount > 0 {
+		if err := generateTraefikConfig(traefikConfig, outputDir, managedDomains, apiURL); err != nil {
 			log.Errorf("failed to generate Traefik config: %v", err)
 			errorCount++
 		} else {
-			log.Infof("Traefik configuration file created successfully")
+			log.Infof("generated Traefik config=%s certificates=%d", traefikConfig, successCount)
 		}
 	}
 
 	// Summary
-	log.Infof("========================================")
-	log.Infof("Summary:")
-	log.Infof("  Total domains: %d", len(managedDomains))
-	log.Infof("  Successfully saved: %d", successCount)
-	log.Infof("  Skipped: %d", skipCount)
-	log.Infof("  Errors: %d", errorCount)
-	if finalTraefikConfig != "" && successCount > 0 {
-		log.Infof("  Traefik config: %s", finalTraefikConfig)
+	summaryMsg := fmt.Sprintf("fetch complete: total=%d saved=%d skipped=%d errors=%d",
+		len(managedDomains), successCount, skipCount, errorCount)
+	if traefikConfig != "" && successCount > 0 {
+		summaryMsg += fmt.Sprintf(" traefik_config=%s", traefikConfig)
 	}
-	log.Infof("========================================")
+	log.Infof(summaryMsg)
 
 	if errorCount > 0 {
-		os.Exit(1)
+		return 1
 	}
+	return 0
+}
+
+// API client functions
+
+type apiDomainsResponse struct {
+	Domains []string `json:"domains"`
+	Count   int      `json:"count"`
+}
+
+type apiCertInfo struct {
+	CommonName   string   `json:"common_name"`
+	SANs         []string `json:"sans"`
+	LeafCertPEM  string   `json:"leaf_cert_pem"`
+	CertChainPEM string   `json:"cert_chain_pem"`
+	CertChainURL string   `json:"cert_chain_url"`
+	Issuers      []string `json:"issuers"`
+	IssuedOn     string   `json:"issued_on"`
+	ExpiresOn    string   `json:"expires_on"`
+	Managed      bool     `json:"managed"`
+	Status       string   `json:"status"`
+	Error        string   `json:"error,omitempty"`
+}
+
+type apiPrivateKeyResponse struct {
+	Domain     string `json:"domain"`
+	PrivateKey string `json:"private_key"`
+}
+
+type apiErrorResponse struct {
+	Error string `json:"error"`
+}
+
+func checkAPIHealth(apiURL string) error {
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := client.Get(fmt.Sprintf("%s/healthz", apiURL))
+	if err != nil {
+		return fmt.Errorf("connection failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusServiceUnavailable {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+func getManagedDomains(apiURL string) ([]string, error) {
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	resp, err := client.Get(fmt.Sprintf("%s/domains", apiURL))
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result apiDomainsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result.Domains, nil
+}
+
+func getCertInfo(apiURL, domain string) (*apiCertInfo, error) {
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	// Get all certs and find the one for this domain
+	resp, err := client.Get(fmt.Sprintf("%s/certs", apiURL))
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var certs []apiCertInfo
+	if err := json.NewDecoder(resp.Body).Decode(&certs); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	// Find cert for this domain
+	for _, cert := range certs {
+		if cert.CommonName == domain {
+			return &cert, nil
+		}
+	}
+
+	return nil, fmt.Errorf("certificate not found for domain %s", domain)
+}
+
+func getPrivateKey(apiURL, domain string) (string, error) {
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	resp, err := client.Get(fmt.Sprintf("%s/certs/%s/private-key", apiURL, domain))
+	if err != nil {
+		return "", fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp apiErrorResponse
+		if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+			body, _ := io.ReadAll(resp.Body)
+			return "", fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
+		}
+		return "", fmt.Errorf("API error: %s", errResp.Error)
+	}
+
+	var result apiPrivateKeyResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result.PrivateKey, nil
 }
 
 type traefikCertificate struct {
@@ -200,18 +408,18 @@ type traefikConfig struct {
 	TLS traefikTLS `yaml:"tls"`
 }
 
-func generateTraefikConfig(configPath string, certDir string, domains []string, ks keystore.Keystore) error {
+func generateTraefikConfig(configPath string, certDir string, domains []string, apiURL string) error {
 	var certificates []traefikCertificate
 
 	// Build certificate list
 	for _, domain := range domains {
 		// Check if certificate exists and is valid
-		certAndKey, err := ks.GetCertAndKey(domain)
-		if err != nil || !certAndKey.Managed || certAndKey.Status != "issued" && certAndKey.Status != "" {
+		certInfo, err := getCertInfo(apiURL, domain)
+		if err != nil || !certInfo.Managed || certInfo.Status != "issued" && certInfo.Status != "" {
 			continue
 		}
 
-		if certAndKey.LeafCertPEM == "" || certAndKey.PrivateKeyPEM == "" {
+		if certInfo.LeafCertPEM == "" {
 			continue
 		}
 
@@ -256,6 +464,5 @@ func generateTraefikConfig(configPath string, certDir string, domains []string, 
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 
-	log.Infof("wrote %d certificate(s) to Traefik config", len(certificates))
 	return nil
 }

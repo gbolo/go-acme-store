@@ -48,9 +48,6 @@ func main() {
 	if cfg == "" {
 		cfg = os.Getenv("CONFIG_FILE")
 	}
-	if cfg == "" {
-		cfg = "./config.yml"
-	}
 
 	config.MustInitViperAndLogger(appName, cfg)
 

@@ -88,13 +88,6 @@ func main() {
 		log.Fatalf("fetcher.api_url is required (e.g., http://127.0.0.1:15872/api)")
 	}
 
-	// Validate API URL by checking health endpoint
-	if err := checkAPIHealth(apiURL); err != nil {
-		log.Fatalf("failed to connect to acme-store API at %s: %v", apiURL, err)
-	}
-
-	log.Infof("connected to acme-store API at %s", apiURL)
-
 	// Ensure output directory exists
 	if err := os.MkdirAll(finalOutputDir, 0755); err != nil {
 		log.Fatalf("failed to create output directory %s: %v", finalOutputDir, err)
@@ -104,10 +97,23 @@ func main() {
 
 	// Run in daemon mode if requested
 	if daemonMode {
+		// In daemon mode, check API health but don't exit if it fails
+		if err := checkAPIHealth(apiURL); err != nil {
+			log.Warnf("failed to connect to acme-store API at %s: %v (will retry in daemon loop)", apiURL, err)
+		} else {
+			log.Infof("connected to acme-store API at %s", apiURL)
+		}
 		log.Infof("running in daemon mode, checking every %v", checkInterval)
 		runDaemon(apiURL, finalOutputDir, finalTraefikConfig, checkInterval)
 		return
 	}
+
+	// In one-shot mode, validate API URL by checking health endpoint (fatal if fails)
+	if err := checkAPIHealth(apiURL); err != nil {
+		log.Fatalf("failed to connect to acme-store API at %s: %v", apiURL, err)
+	}
+
+	log.Infof("connected to acme-store API at %s", apiURL)
 
 	// Run single fetch
 	exitCode := performFetch(apiURL, finalOutputDir, finalTraefikConfig)
@@ -133,7 +139,6 @@ func runDaemon(apiURL, outputDir, traefikConfig string, checkInterval time.Durat
 	defer ticker.Stop()
 
 	log.Infof("daemon started, will check for updates every %v", checkInterval)
-	log.Infof("press Ctrl+C to stop gracefully")
 
 	for {
 		select {

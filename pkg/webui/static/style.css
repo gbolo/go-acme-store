@@ -143,6 +143,36 @@ header h1 {
     transform: scale(1.05);
 }
 
+.action-btn.btn-info {
+    background: #3b82f6;
+    color: white;
+}
+
+.action-btn.btn-info:hover {
+    background: #2563eb;
+    transform: scale(1.05);
+}
+
+.action-btn.btn-warning {
+    background: var(--warning-color);
+    color: white;
+}
+
+.action-btn.btn-warning:hover {
+    background: #d97706;
+    transform: scale(1.05);
+}
+
+.action-btn.btn-danger {
+    background: var(--danger-color);
+    color: white;
+}
+
+.action-btn.btn-danger:hover {
+    background: #dc2626;
+    transform: scale(1.05);
+}
+
 .action-btn svg {
     width: 18px;
     height: 18px;
@@ -955,6 +985,65 @@ footer a svg {
 
 footer a:hover svg {
     transform: scale(1.1);
+}
+
+/* Import/Export Modal Styles */
+.success-message, .error-message {
+    text-align: center;
+    padding: 30px;
+}
+
+.success-message h3, .error-message h3 {
+    margin: 20px 0 10px;
+    font-size: 1.5em;
+}
+
+.success-message p, .error-message p {
+    margin: 10px 0;
+    color: var(--text-secondary);
+}
+
+.import-stats {
+    margin: 20px 0;
+    padding: 20px;
+    background: var(--bg-color);
+    border-radius: 8px;
+    text-align: left;
+}
+
+.import-stats h4 {
+    margin-bottom: 15px;
+    color: var(--primary-color);
+}
+
+.import-stats ul {
+    list-style: none;
+    padding: 0;
+}
+
+.import-stats li {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.import-stats li:last-child {
+    border-bottom: none;
+}
+
+.warning-box {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 15px;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid var(--warning-color);
+    border-radius: 8px;
+    margin-top: 20px;
+}
+
+.warning-box i {
+    font-size: 24px;
+    color: var(--warning-color);
 }
 
 /* Responsive Design */

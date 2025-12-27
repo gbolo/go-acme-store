@@ -755,3 +755,177 @@ async function deleteUnmanagedCert(domain) {
     }
 }
 
+// Keystore Import/Export Functions
+
+async function exportKeystore() {
+    try {
+        const response = await fetch('/api/keystore/export');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const exportData = await response.json();
+        
+        // Create filename with timestamp
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+        const filename = `acme-keystore-export-${timestamp}.json`;
+        
+        // Create blob and download
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        
+        // Show success modal
+        showImportExportResult(
+            'Export Successful',
+            `<div class="success-message">
+                <i class="fi fi-rr-check-circle" style="font-size: 48px; color: var(--success-color);"></i>
+                <h3>Keystore exported successfully!</h3>
+                <p>Exported ${Object.keys(exportData.certificates || {}).length} certificate(s) and ${(exportData.managed_domains || []).length} managed domain(s)</p>
+                <p><strong>File:</strong> ${filename}</p>
+                <div class="warning-box">
+                    <i class="fi fi-rr-exclamation"></i>
+                    <span><strong>Security Notice:</strong> This export contains sensitive data including private keys. Store it securely!</span>
+                </div>
+            </div>`
+        );
+        
+    } catch (error) {
+        console.error('Error exporting keystore:', error);
+        showImportExportResult(
+            'Export Failed',
+            `<div class="error-message">
+                <i class="fi fi-rr-cross-circle" style="font-size: 48px; color: var(--danger-color);"></i>
+                <h3>Failed to export keystore</h3>
+                <p>${escapeHtml(error.message)}</p>
+            </div>`
+        );
+    }
+}
+
+async function importKeystore(event) {
+    const file = event.target.files[0];
+    
+    if (!file) {
+        return;
+    }
+    
+    // Confirm before importing
+    if (!confirm('⚠️ IMPORT KEYSTORE ⚠️\n\nThis will import certificates and domains from the selected file.\n\nExisting certificates with the same domain will be overwritten!\n\nAre you sure you want to continue?')) {
+        event.target.value = ''; // Reset file input
+        return;
+    }
+    
+    try {
+        // Read file
+        const fileContent = await file.text();
+        let importData;
+        
+        try {
+            importData = JSON.parse(fileContent);
+        } catch (e) {
+            throw new Error('Invalid JSON file');
+        }
+        
+        // Validate import data
+        if (!importData.version || !importData.certificates || !importData.managed_domains) {
+            throw new Error('Invalid keystore export file format');
+        }
+        
+        // Show loading state
+        showImportExportResult(
+            'Importing Keystore...',
+            `<div class="loading">
+                <div class="spinner"></div>
+                <p>Importing certificates and domains...</p>
+            </div>`
+        );
+        
+        // Send import request
+        const response = await fetch('/api/keystore/import', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: fileContent
+        });
+        
+        const result = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(result.error || 'Import failed');
+        }
+        
+        // Show success result
+        const stats = result.statistics;
+        showImportExportResult(
+            'Import Complete',
+            `<div class="success-message">
+                <i class="fi fi-rr-check-circle" style="font-size: 48px; color: var(--success-color);"></i>
+                <h3>Keystore imported successfully!</h3>
+                <div class="import-stats">
+                    <h4>Import Statistics:</h4>
+                    <ul>
+                        <li><strong>Certificates:</strong> ${stats.certificates_imported} imported, ${stats.certificates_failed} failed (${stats.certificates_total} total)</li>
+                        <li><strong>Managed Domains:</strong> ${stats.domains_imported} imported, ${stats.domains_failed} failed (${stats.domains_total} total)</li>
+                    </ul>
+                </div>
+                ${stats.certificates_failed > 0 || stats.domains_failed > 0 ? 
+                    `<div class="warning-box">
+                        <i class="fi fi-rr-exclamation"></i>
+                        <span>Some items failed to import. Check the logs for details.</span>
+                    </div>` : ''}
+            </div>`
+        );
+        
+        // Reload certificates after import
+        setTimeout(() => {
+            loadCertificates();
+        }, 2000);
+        
+    } catch (error) {
+        console.error('Error importing keystore:', error);
+        showImportExportResult(
+            'Import Failed',
+            `<div class="error-message">
+                <i class="fi fi-rr-cross-circle" style="font-size: 48px; color: var(--danger-color);"></i>
+                <h3>Failed to import keystore</h3>
+                <p>${escapeHtml(error.message)}</p>
+            </div>`
+        );
+    } finally {
+        // Reset file input
+        event.target.value = '';
+    }
+}
+
+function showImportExportResult(title, body) {
+    const modal = document.getElementById('importExportModal');
+    const titleEl = document.getElementById('importExportTitle');
+    const bodyEl = document.getElementById('importExportBody');
+    
+    titleEl.textContent = title;
+    bodyEl.innerHTML = body;
+    modal.style.display = 'block';
+}
+
+function closeImportExportModal() {
+    const modal = document.getElementById('importExportModal');
+    modal.style.display = 'none';
+}
+
+// Close import/export modal when clicking outside
+window.addEventListener('click', function(event) {
+    const modal = document.getElementById('importExportModal');
+    if (event.target === modal) {
+        closeImportExportModal();
+    }
+});
+

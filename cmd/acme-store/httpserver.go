@@ -3,10 +3,12 @@ package main
 import (
 	"fmt"
 	"go-acme-store/pkg/httpserver"
+	"go-acme-store/pkg/keystore"
 	"go-acme-store/pkg/log"
 	"go-acme-store/pkg/meta"
 	"go-acme-store/pkg/webui"
 	"net/http"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/filesystem"
@@ -35,6 +37,10 @@ func httpServerDaemon(appName string) {
 
 	// ACME operations
 	api.Post("/trigger-renewal", handlerTriggerRenewal)
+
+	// Keystore backup/restore operations
+	api.Get("/keystore/export", handlerExportKeystore)
+	api.Post("/keystore/import", handlerImportKeystore)
 
 	// UI routes - serve embedded static files
 	ui := fiberApp.Group("/ui")
@@ -464,5 +470,214 @@ func handlerDeleteCert(c *fiber.Ctx) (err error) {
 	return c.Status(200).JSON(&fiber.Map{
 		"message": fmt.Sprintf("certificate for domain %s deleted successfully", domain),
 		"domain":  domain,
+	})
+}
+
+// Keystore export/import structures and handlers
+
+type keystoreExport struct {
+	Version      string                        `json:"version"`
+	ExportedAt   string                        `json:"exported_at"`
+	AcmeAccount  keystoreAccountExport         `json:"acme_account"`
+	Certificates map[string]keystoreCertExport `json:"certificates"`
+	Domains      []string                      `json:"managed_domains"`
+}
+
+type keystoreAccountExport struct {
+	Email string `json:"email"`
+	Key   string `json:"key"`
+}
+
+type keystoreCertExport struct {
+	CertChainPEM  string   `json:"cert_chain_pem"`
+	LeafCertPEM   string   `json:"leaf_cert_pem"`
+	CertChainURL  string   `json:"cert_chain_url"`
+	PrivateKeyPEM string   `json:"private_key_pem"`
+	Issuers       []string `json:"issuers"`
+	IssuedOn      string   `json:"issued_on"`
+	Expiration    string   `json:"expires_on"`
+	CommonName    string   `json:"common_name"`
+	SANs          []string `json:"sans"`
+	Managed       bool     `json:"managed"`
+	Status        string   `json:"status"`
+	Error         string   `json:"error,omitempty"`
+}
+
+func handlerExportKeystore(c *fiber.Ctx) (err error) {
+	if err := ensureKeystore(); err != nil {
+		return c.Status(503).JSON(&fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	log.Infof("keystore export requested via API")
+
+	// Get ACME account
+	account, err := ks.GetAcmeAccount()
+	if err != nil {
+		return c.Status(500).JSON(&fiber.Map{
+			"error": fmt.Sprintf("failed to get ACME account: %v", err),
+		})
+	}
+
+	// Get all domains
+	domains, err := ks.GetAllDomains()
+	if err != nil {
+		return c.Status(500).JSON(&fiber.Map{
+			"error": fmt.Sprintf("failed to get domains: %v", err),
+		})
+	}
+
+	// Get managed domains
+	managedDomains, err := ks.GetManagedDomains()
+	if err != nil {
+		return c.Status(500).JSON(&fiber.Map{
+			"error": fmt.Sprintf("failed to get managed domains: %v", err),
+		})
+	}
+
+	// Build export data
+	exportData := keystoreExport{
+		Version:    "1.0",
+		ExportedAt: time.Now().Format(time.RFC3339),
+		AcmeAccount: keystoreAccountExport{
+			Email: account.Email,
+			Key:   account.Key,
+		},
+		Certificates: make(map[string]keystoreCertExport),
+		Domains:      managedDomains,
+	}
+
+	// Export all certificates
+	for _, domain := range domains {
+		certAndKey, err := ks.GetCertAndKey(domain)
+		if err != nil {
+			log.Warnf("failed to get cert for domain %s during export: %v", domain, err)
+			continue
+		}
+
+		exportData.Certificates[domain] = keystoreCertExport{
+			CertChainPEM:  certAndKey.CertChainPEM,
+			LeafCertPEM:   certAndKey.LeafCertPEM,
+			CertChainURL:  certAndKey.CertChainURL,
+			PrivateKeyPEM: certAndKey.PrivateKeyPEM,
+			Issuers:       certAndKey.Issuers,
+			IssuedOn:      certAndKey.IssuedOn,
+			Expiration:    certAndKey.Expiration,
+			CommonName:    certAndKey.CommonName,
+			SANs:          certAndKey.SANs,
+			Managed:       certAndKey.Managed,
+			Status:        certAndKey.Status,
+			Error:         certAndKey.Error,
+		}
+	}
+
+	log.Infof("keystore exported: %d certificates, %d managed domains", len(exportData.Certificates), len(exportData.Domains))
+
+	return c.Status(200).JSON(exportData)
+}
+
+func handlerImportKeystore(c *fiber.Ctx) (err error) {
+	if err := ensureKeystore(); err != nil {
+		return c.Status(503).JSON(&fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	log.Infof("keystore import requested via API")
+
+	// Parse import data
+	var importData keystoreExport
+	if err := c.BodyParser(&importData); err != nil {
+		return c.Status(400).JSON(&fiber.Map{
+			"error": fmt.Sprintf("invalid import data: %v", err),
+		})
+	}
+
+	// Validate version
+	if importData.Version != "1.0" {
+		return c.Status(400).JSON(&fiber.Map{
+			"error": fmt.Sprintf("unsupported export version: %s (expected 1.0)", importData.Version),
+		})
+	}
+
+	// Track import statistics
+	var (
+		certsImported   = 0
+		certsFailed     = 0
+		domainsImported = 0
+		domainsFailed   = 0
+	)
+
+	// Import certificates
+	for domain, cert := range importData.Certificates {
+		certAndKey := keystore.CertAndKey{
+			CertChainPEM:  cert.CertChainPEM,
+			LeafCertPEM:   cert.LeafCertPEM,
+			CertChainURL:  cert.CertChainURL,
+			PrivateKeyPEM: cert.PrivateKeyPEM,
+			Issuers:       cert.Issuers,
+			IssuedOn:      cert.IssuedOn,
+			Expiration:    cert.Expiration,
+			CommonName:    cert.CommonName,
+			SANs:          cert.SANs,
+			Managed:       cert.Managed,
+			Status:        cert.Status,
+			Error:         cert.Error,
+		}
+
+		if err := ks.StoreCertAndKey(domain, certAndKey); err != nil {
+			log.Warnf("failed to import certificate for %s: %v", domain, err)
+			certsFailed++
+		} else {
+			certsImported++
+		}
+	}
+
+	// Import managed domains
+	for _, domain := range importData.Domains {
+		// Check if domain already exists
+		isManaged, err := ks.IsManagedDomain(domain)
+		if err != nil {
+			log.Warnf("failed to check if domain %s is managed: %v", domain, err)
+			domainsFailed++
+			continue
+		}
+
+		if !isManaged {
+			// Get SANs from certificate if available
+			var sans []string
+			if cert, ok := importData.Certificates[domain]; ok {
+				sans = cert.SANs
+			}
+
+			if len(sans) > 0 {
+				err = ks.AddManagedDomainWithSANs(domain, sans)
+			} else {
+				err = ks.AddManagedDomain(domain)
+			}
+
+			if err != nil {
+				log.Warnf("failed to import managed domain %s: %v", domain, err)
+				domainsFailed++
+			} else {
+				domainsImported++
+			}
+		}
+	}
+
+	log.Infof("keystore import complete: certificates=%d/%d, managed_domains=%d/%d",
+		certsImported, len(importData.Certificates), domainsImported, len(importData.Domains))
+
+	return c.Status(200).JSON(&fiber.Map{
+		"message": "keystore import completed",
+		"statistics": &fiber.Map{
+			"certificates_imported": certsImported,
+			"certificates_failed":   certsFailed,
+			"certificates_total":    len(importData.Certificates),
+			"domains_imported":      domainsImported,
+			"domains_failed":        domainsFailed,
+			"domains_total":         len(importData.Domains),
+		},
 	})
 }

@@ -78,6 +78,13 @@ func main() {
 		checkInterval = 5 * time.Minute
 	}
 
+	// Enforce minimum check interval of 30 seconds
+	minInterval := 30 * time.Second
+	if checkInterval < minInterval {
+		log.Warnf("check_interval %v is too short, enforcing minimum of %v", checkInterval, minInterval)
+		checkInterval = minInterval
+	}
+
 	// Get API URL
 	apiURL := viper.GetString("fetcher.api_url")
 	if apiURL == "" {
@@ -212,10 +219,12 @@ func performFetch(apiURL, outputDir, traefikConfig string) int {
 		certFilename := filepath.Join(outputDir, fmt.Sprintf("%s_cert-chain.pem", safeDomain))
 		keyFilename := filepath.Join(outputDir, fmt.Sprintf("%s_key.pem", safeDomain))
 
-		// Build full chain (leaf + intermediates)
-		fullChain := certInfo.LeafCertPEM
-		if certInfo.CertChainPEM != "" {
-			fullChain = fullChain + "\n" + certInfo.CertChainPEM
+		// Use full chain from API (already contains leaf + intermediates)
+		// CertChainPEM contains the complete chain, LeafCertPEM is just the first cert extracted
+		fullChain := certInfo.CertChainPEM
+		if fullChain == "" {
+			// Fallback to just leaf cert if chain is empty (shouldn't happen normally)
+			fullChain = certInfo.LeafCertPEM
 		}
 
 		// Try to load existing private key from disk
@@ -230,7 +239,7 @@ func performFetch(apiURL, outputDir, traefikConfig string) int {
 				log.Debugf("using existing private key for domain=%s", domain)
 			} else {
 				// Existing key doesn't match, need to fetch from API
-				log.Debugf("existing key doesn't match certificate for domain=%s, fetching from API", domain)
+				log.Warnf("existing key doesn't match certificate for domain=%s, fetching from API", domain)
 			}
 		}
 

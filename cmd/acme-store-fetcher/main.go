@@ -199,14 +199,6 @@ func performFetch(apiURL, outputDir, traefikConfig string) int {
 			continue
 		}
 
-		// Fetch private key from API
-		privateKey, err := getPrivateKey(apiURL, domain)
-		if err != nil {
-			log.Errorf("failed to get private key for %s: %v", domain, err)
-			errorCount++
-			continue
-		}
-
 		// Generate safe filename (replace * with _wild_)
 		safeDomain := strings.ReplaceAll(domain, "*", "_wild_")
 
@@ -217,6 +209,32 @@ func performFetch(apiURL, outputDir, traefikConfig string) int {
 		fullChain := certInfo.LeafCertPEM
 		if certInfo.CertChainPEM != "" {
 			fullChain = fullChain + "\n" + certInfo.CertChainPEM
+		}
+
+		// Try to load existing private key from disk
+		var privateKey string
+		existingKeyData, err := os.ReadFile(keyFilename)
+		if err == nil {
+			// We have an existing key, check if it matches the certificate
+			existingKey := string(existingKeyData)
+			if verifyKeyPairMatch(fullChain, existingKey) {
+				// Existing key matches, use it
+				privateKey = existingKey
+				log.Debugf("using existing private key for domain=%s", domain)
+			} else {
+				// Existing key doesn't match, need to fetch from API
+				log.Debugf("existing key doesn't match certificate for domain=%s, fetching from API", domain)
+			}
+		}
+
+		// Fetch private key from API if we don't have a valid one
+		if privateKey == "" {
+			privateKey, err = getPrivateKey(apiURL, domain)
+			if err != nil {
+				log.Errorf("failed to get private key for %s: %v", domain, err)
+				errorCount++
+				continue
+			}
 		}
 
 		// Check if we need to update the files

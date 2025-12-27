@@ -65,7 +65,7 @@ func handlerVersion(c *fiber.Ctx) (err error) {
 
 func handlerHealthCheck(c *fiber.Ctx) (err error) {
 	health := &fiber.Map{
-		"status":   "healthy",
+		"status": "healthy",
 		"keystore": &fiber.Map{
 			"connected": false,
 			"status":    "unavailable",

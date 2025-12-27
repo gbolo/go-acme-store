@@ -1,8 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"flag"
 	"fmt"
 	"go-acme-store/pkg/config"
@@ -214,6 +219,15 @@ func performFetch(apiURL, outputDir, traefikConfig string) int {
 			fullChain = fullChain + "\n" + certInfo.CertChainPEM
 		}
 
+		// Check if we need to update the files
+		needsUpdate, reason := needsCertificateUpdate(certFilename, keyFilename, fullChain, privateKey)
+
+		if !needsUpdate {
+			log.Debugf("skipping domain=%s reason=%s", domain, reason)
+			skipCount++
+			continue
+		}
+
 		// Write certificate chain
 		if err := os.WriteFile(certFilename, []byte(fullChain), 0644); err != nil {
 			log.Errorf("failed to write certificate file for %s: %v", domain, err)
@@ -230,7 +244,7 @@ func performFetch(apiURL, outputDir, traefikConfig string) int {
 			continue
 		}
 
-		log.Infof("saved certificate for domain=%s cert=%s key=%s", domain, certFilename, keyFilename)
+		log.Infof("saved certificate for domain=%s cert=%s key=%s reason=%s", domain, certFilename, keyFilename, reason)
 		successCount++
 	}
 
@@ -256,6 +270,124 @@ func performFetch(apiURL, outputDir, traefikConfig string) int {
 		return 1
 	}
 	return 0
+}
+
+// Certificate comparison functions
+
+// needsCertificateUpdate checks if certificate files need to be updated
+// Returns (needsUpdate bool, reason string)
+func needsCertificateUpdate(certFile, keyFile, newCert, newKey string) (bool, string) {
+	// Check if files exist
+	certExists := fileExists(certFile)
+	keyExists := fileExists(keyFile)
+
+	// If either file doesn't exist, we need to write them
+	if !certExists || !keyExists {
+		if !certExists && !keyExists {
+			return true, "files_missing"
+		}
+		if !certExists {
+			return true, "cert_missing"
+		}
+		return true, "key_missing"
+	}
+
+	// Read existing files
+	existingCert, err := os.ReadFile(certFile)
+	if err != nil {
+		return true, "read_error"
+	}
+
+	existingKey, err := os.ReadFile(keyFile)
+	if err != nil {
+		return true, "read_error"
+	}
+
+	// Compare certificate content (normalize whitespace)
+	if !bytes.Equal(normalizePEM(existingCert), normalizePEM([]byte(newCert))) {
+		return true, "cert_changed"
+	}
+
+	// Compare key content (normalize whitespace)
+	if !bytes.Equal(normalizePEM(existingKey), normalizePEM([]byte(newKey))) {
+		return true, "key_changed"
+	}
+
+	// Verify the key matches the certificate
+	if !verifyKeyPairMatch(newCert, newKey) {
+		return true, "key_mismatch"
+	}
+
+	// Everything matches, no update needed
+	return false, "unchanged"
+}
+
+// fileExists checks if a file exists
+func fileExists(filename string) bool {
+	_, err := os.Stat(filename)
+	return err == nil
+}
+
+// normalizePEM normalizes PEM content by trimming whitespace
+func normalizePEM(pemData []byte) []byte {
+	return bytes.TrimSpace(pemData)
+}
+
+// verifyKeyPairMatch verifies that the private key matches the certificate's public key
+func verifyKeyPairMatch(certPEM, keyPEM string) bool {
+	// Parse certificate
+	block, _ := pem.Decode([]byte(certPEM))
+	if block == nil || block.Type != "CERTIFICATE" {
+		return false
+	}
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return false
+	}
+
+	// Parse private key
+	keyBlock, _ := pem.Decode([]byte(keyPEM))
+	if keyBlock == nil {
+		return false
+	}
+
+	var privateKey interface{}
+	var parseErr error
+
+	// Try different key types
+	switch keyBlock.Type {
+	case "RSA PRIVATE KEY":
+		privateKey, parseErr = x509.ParsePKCS1PrivateKey(keyBlock.Bytes)
+	case "EC PRIVATE KEY":
+		privateKey, parseErr = x509.ParseECPrivateKey(keyBlock.Bytes)
+	case "PRIVATE KEY":
+		privateKey, parseErr = x509.ParsePKCS8PrivateKey(keyBlock.Bytes)
+	default:
+		return false
+	}
+
+	if parseErr != nil {
+		return false
+	}
+
+	// Compare public keys
+	switch pub := cert.PublicKey.(type) {
+	case *rsa.PublicKey:
+		priv, ok := privateKey.(*rsa.PrivateKey)
+		if !ok {
+			return false
+		}
+		return pub.N.Cmp(priv.N) == 0 && pub.E == priv.E
+	case *ecdsa.PublicKey:
+		priv, ok := privateKey.(*ecdsa.PrivateKey)
+		if !ok {
+			return false
+		}
+		return pub.X.Cmp(priv.X) == 0 && pub.Y.Cmp(priv.Y) == 0
+	default:
+		return false
+	}
 }
 
 // API client functions
